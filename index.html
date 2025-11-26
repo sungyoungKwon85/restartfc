@@ -263,7 +263,8 @@
   <div class="note">
     · 참석 체크박스는 기본적으로 모두 꺼진 상태입니다. 오는 사람만 체크하세요.<br>
     · 포지션은 직접 수정하거나, 입력 중에 리스트에서 골라 쓸 수 있습니다.<br>
-    · 목표 쿼터는 0.5 단위 입력 가능 (예: 2.5), 지각/조퇴는 시작Q/종료Q로 조정.
+    · 목표 쿼터는 0.5 단위 입력 가능하지만, 현재 라인업 배정은 **쿼터 단위(1Q)** 기준입니다.<br>
+    · 지각/조퇴는 시작Q/종료Q로 조정합니다.
   </div>
 
   <!-- 결과 영역 -->
@@ -307,8 +308,8 @@ const initialPlayersTemplate = [
   { name: "호균",  main: "DM", sub1: "CM", sub2: "AM" }
 ];
 
-// localStorage key
-const STORAGE_KEY = "restartfc_players_v3";
+// localStorage key (버전 올림)
+const STORAGE_KEY = "restartfc_players_v4";
 
 /**
  * 포메이션 정의 (인원수 + 백 기준)
@@ -362,8 +363,7 @@ const FORMATIONS = {
 };
 
 // 포지션 우선순위 (명단 정렬용)
-// 요구: GK → CB → LB → RB → DM → CM → AM → LW → RW → CF
-// 세부 포지션은 근처에 붙여줌
+// GK → CB → LB → RB → DM → CM → AM → LW → RW → CF
 const POSITION_PRIORITY = [
   "GK",
   "CB", "LCB", "RCB",
@@ -454,7 +454,7 @@ function init() {
     targetQ: p.targetQ !== undefined ? Number(p.targetQ) || 3 : 3,
     startQ: p.startQ !== undefined ? Number(p.startQ) || 1 : 1,
     endQ: p.endQ !== undefined ? Number(p.endQ) || 4 : 4,
-    allocatedSlots: 0
+    allocatedQuarters: 0
   }));
 
   renderPlayersTable();
@@ -598,15 +598,7 @@ function renderQuarterCards() {
     h3.innerHTML = `${q}Q <span class="badge" id="badgeQ${q}"></span>`;
     card.appendChild(h3);
 
-    const table = document.createElement("table");
-    table.innerHTML = `
-      <thead>
-        <tr><th>포지션</th><th>선수(전/후반)</th></tr>
-      </thead>
-      <tbody id="tbodyQ${q}"></tbody>
-    `;
-    card.appendChild(table);
-
+    // 이제 텍스트 테이블은 없고, 그림만.
     const pitch = document.createElement("div");
     pitch.id = `pitchQ${q}`;
     pitch.className = "pitch";
@@ -630,7 +622,7 @@ function addPlayer() {
     targetQ: 2,
     startQ: 1,
     endQ: 4,
-    allocatedSlots: 0
+    allocatedQuarters: 0
   });
   savePlayersToStorage();
   renderPlayersTable();
@@ -643,7 +635,7 @@ function resetPlayers() {
 }
 
 /* =========================
-   5. 라인업 생성 로직
+   5. 라인업 생성 로직 (쿼터당 1회 배정)
    ========================= */
 
 function generateLineup() {
@@ -662,212 +654,189 @@ function generateLineup() {
 
   // 선수별 상태 초기화
   players.forEach(p => {
-    p.allocatedSlots = 0;
+    p.allocatedQuarters = 0;
   });
 
-  // 슬롯 목록 생성 (쿼터 × 포지션 × 전/후반)
+  // 쿼터별로 "이미 배정된 선수"를 추적 (한 쿼터에 한 번만 배정)
+  const assignedByQuarter = {
+    1: new Set(),
+    2: new Set(),
+    3: new Set(),
+    4: new Set()
+  };
+
+  // GK 유지용: 직전 쿼터 GK 인덱스
+  let lastGkIndex = null;
+
+  // 슬롯: quarter + position + playerIndex
   const slots = [];
+
   for (let q=1;q<=4;q++) {
     const formKey = formationKeyByQuarter[q];
     const form = FORMATIONS[formKey];
     if (!form) continue;
     const positions = flattenPositions(form.grid);
 
-    ["A","B"].forEach(half => {
-      positions.forEach((pos, posIndex) => {
-        slots.push({ quarter:q, half, position:pos, posIndex, playerIndex:null });
+    // 포지션 순서를 정렬해서, 중요 포지션부터 배정하는 것도 가능하지만
+    // 여기선 정의된 순서를 그대로 사용.
+    positions.forEach(pos => {
+      let bestIdx = -1;
+      let bestScore = -1e15;
+
+      players.forEach((p, idx) => {
+        const score = scorePlayerForSlotQuarter(p, idx, q, pos, assignedByQuarter, lastGkIndex);
+        if (score > bestScore) {
+          bestScore = score;
+          bestIdx = idx;
+        }
       });
-    });
-  }
 
-  // Greedy 배분 (전·후반 교체 최소화를 위해 B슬롯에서 A슬롯 동일 선수 가중치)
-  slots.forEach((slot, slotIndex, allSlots) => {
-    let bestIdx = -1;
-    let bestScore = -1e15;
+      if (bestIdx >= 0 && bestScore > -1e10) {
+        slots.push({ quarter: q, position: pos, playerIndex: bestIdx });
+        players[bestIdx].allocatedQuarters += 1;
+        assignedByQuarter[q].add(bestIdx);
 
-    players.forEach((p, idx) => {
-      const score = scorePlayerForSlot(p, slot, allSlots, idx);
-      if (score > bestScore) {
-        bestScore = score;
-        bestIdx = idx;
+        // GK면 lastGkIndex 갱신
+        if (pos === "GK") {
+          lastGkIndex = bestIdx;
+        }
+      } else {
+        // 아무도 배정 못하면 빈 슬롯
+        slots.push({ quarter: q, position: pos, playerIndex: null });
       }
     });
-
-    if (bestIdx >= 0 && bestScore > -1e10) {
-      slot.playerIndex = bestIdx;
-      players[bestIdx].allocatedSlots += 1; // 0.5쿼터
-    }
-  });
+  }
 
   renderResult(slots, formationKeyByQuarter);
 }
 
-function scorePlayerForSlot(p, slot, allSlots, playerIndex) {
+/**
+ * 한 쿼터당 한 번만 배정 & GK 연속 배정 & 타깃 쿼터 반영한 점수 계산
+ */
+function scorePlayerForSlotQuarter(p, playerIndex, quarter, position, assignedByQuarter, lastGkIndex) {
   if (!p.present) return -1e12;
   if (!p.name) return -1e12;
 
   // 쿼터 범위 체크
-  if (slot.quarter < p.startQ || slot.quarter > p.endQ) return -1e12;
+  if (quarter < p.startQ || quarter > p.endQ) return -1e12;
 
-  const targetSlots = (p.targetQ || 0) * 2;
-  if (targetSlots <= 0) return -1e12;
+  // 이미 이 쿼터에서 다른 포지션으로 배정된 선수는 제외
+  if (assignedByQuarter[quarter].has(playerIndex)) return -1e12;
 
-  // 이미 목표 슬롯 다 채웠으면 우선순위 낮춤
-  if (p.allocatedSlots >= targetSlots) return -1e9;
+  const targetQ = p.targetQ || 0;
+  if (targetQ <= 0) return -1e12;
 
   let score = 0;
 
-  if (slot.position === p.main)      score += 100;
-  else if (slot.position === p.sub1) score += 70;
-  else if (slot.position === p.sub2) score += 50;
-  else                               score += 5;   // 포지션 안맞지만 사람이 없을 때용
+  // 포지션 적합도
+  let posScore = 0;
+  if (position === p.main) posScore = 100;
+  else if (position === p.sub1) posScore = 70;
+  else if (position === p.sub2) posScore = 50;
+  else posScore = 5;
 
-  // 덜 뛴 사람에게 가산점
-  const remain = targetSlots - p.allocatedSlots;
-  score += remain;
+  // GK는 별도 가중치: GK가 오면 웬만하면 쭉
+  if (position === "GK") {
+    let gkBase = 0;
+    if (p.main === "GK") gkBase = 200;
+    else if (p.sub1 === "GK" || p.sub2 === "GK") gkBase = 150;
+    else gkBase = 0; // GK가 아닌데 억지로 넣는건 최후의 수단
 
-  // 전·후반 교체 최소화를 위해:
-  // B슬롯일 때, 같은 쿼터/포지션의 A슬롯에 이미 배정된 사람이면 큰 가중치 부여
-  if (slot.half === "B") {
-    const aSlot = allSlots.find(s =>
-      s.quarter === slot.quarter &&
-      s.position === slot.position &&
-      s.half === "A"
-    );
-    if (aSlot && aSlot.playerIndex === playerIndex) {
-      const predicted = p.allocatedSlots + 1; // 이 B슬롯까지 맡았을 때
-      // 목표보다 최대 0.5쿼터(=1슬롯) 정도 초과는 허용
-      if (predicted <= targetSlots + 1) {
-        score += 80;
-      }
+    posScore += gkBase;
+
+    // 직전 쿼터 GK와 동일 인물이면 추가 가중치 (쭉)
+    if (lastGkIndex === playerIndex) {
+      posScore += 80;
     }
+  }
+
+  score += posScore;
+
+  // 목표 쿼터와 현재 배정 비교
+  const allocated = p.allocatedQuarters || 0;
+  const remain = targetQ - allocated;
+
+  if (remain > 0) {
+    // 아직 덜 뛴 선수 우선
+    score += remain * 20; // 꽤 크게 줌
+  } else if (remain < 0) {
+    // 이미 목표를 넘겼으면 페널티
+    score += remain * 10; // 음수
   }
 
   return score;
 }
 
 /* =========================
-   6. 결과 테이블 & 포메이션 그라운드 렌더링
+   6. 결과 렌더링 (그라운드 뷰 + 요약)
    ========================= */
 
 function renderResult(slots, formationKeyByQuarter) {
-  // 쿼터/포지션별 A/B 이름 집계
-  const result = {}; // { q: { pos: {A:name, B:name} } }
-
-  for (let q=1;q<=4;q++) {
-    result[q] = {};
-  }
+  // q → { pos → name }
+  const resultByQuarter = { 1:{}, 2:{}, 3:{}, 4:{} };
 
   slots.forEach(slot => {
     const q = slot.quarter;
     const pos = slot.position;
-    const playerName = slot.playerIndex != null ? players[slot.playerIndex].name : "";
-    if (!result[q][pos]) result[q][pos] = {A:"",B:""};
-    result[q][pos][slot.half] = playerName;
+    const name = (slot.playerIndex != null) ? players[slot.playerIndex].name : "";
+    resultByQuarter[q][pos] = name || "";
   });
 
-  // 쿼터별 테이블 & 그라운드 채우기
+  // 쿼터별 그라운드 뷰 렌더링
   for (let q=1;q<=4;q++) {
     const formKey = formationKeyByQuarter[q];
     const form = FORMATIONS[formKey];
-    const tbody = document.getElementById(`tbodyQ${q}`);
-    const badge = document.getElementById(`badgeQ${q}`);
     const pitch = document.getElementById(`pitchQ${q}`);
+    const badge = document.getElementById(`badgeQ${q}`);
 
-    if (!form) {
-      if (tbody) tbody.innerHTML = "";
-      if (badge) badge.textContent = "";
-      if (pitch) pitch.innerHTML = "";
-      continue;
-    }
-
-    const positions = flattenPositions(form.grid);
-    tbody.innerHTML = "";
-
-    positions.forEach(pos => {
-      const data = result[q][pos] || {A:"",B:""};
-      const a = data.A || "";
-      const b = data.B || "";
-
-      let display;
-      if (a && b) {
-        display = (a === b) ? a : `${a}/${b}`;
-      } else if (a || b) {
-        display = a || b;
-      } else {
-        display = "-";
-      }
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${pos}</td>
-        <td>${display}</td>
-      `;
-      tbody.appendChild(tr);
-    });
+    if (!form || !pitch || !badge) continue;
 
     badge.textContent = form.label;
+    pitch.innerHTML = "";
 
-    // 미니 그라운드 렌더링 (A/B 합쳐서 표기)
-    if (pitch) {
-      pitch.innerHTML = "";
-      form.grid.forEach(row => {
-        const rowDiv = document.createElement("div");
-        rowDiv.className = "pitch-row";
-        row.forEach(pos => {
-          const cell = document.createElement("div");
-          cell.className = "pitch-cell";
-          if (pos) {
-            const data = result[q][pos] || {A:"",B:""};
-            const a = data.A || "";
-            const b = data.B || "";
-            let displayName;
-            if (a && b) {
-              displayName = (a === b) ? a : `${a}/${b}`;
-            } else if (a || b) {
-              displayName = a || b;
-            } else {
-              displayName = "-";
-            }
-
-            const posDiv = document.createElement("div");
-            posDiv.className = "pitch-pos";
-            posDiv.textContent = pos;
-            const nameDiv = document.createElement("div");
-            nameDiv.className = "pitch-name";
-            nameDiv.textContent = displayName;
-            cell.appendChild(posDiv);
-            cell.appendChild(nameDiv);
-          }
-          rowDiv.appendChild(cell);
-        });
-        pitch.appendChild(rowDiv);
+    form.grid.forEach(row => {
+      const rowDiv = document.createElement("div");
+      rowDiv.className = "pitch-row";
+      row.forEach(pos => {
+        const cell = document.createElement("div");
+        cell.className = "pitch-cell";
+        if (pos) {
+          const name = resultByQuarter[q][pos] || "-";
+          const posDiv = document.createElement("div");
+          posDiv.className = "pitch-pos";
+          posDiv.textContent = pos;
+          const nameDiv = document.createElement("div");
+          nameDiv.className = "pitch-name";
+          nameDiv.textContent = name;
+          cell.appendChild(posDiv);
+          cell.appendChild(nameDiv);
+        }
+        rowDiv.appendChild(cell);
       });
-    }
+      pitch.appendChild(rowDiv);
+    });
   }
 
-  // 전체 요약: 총 슬롯 vs 목표 슬롯
-  let totalTargetSlots = 0;
-  let totalAllocatedSlots = 0;
+  // 요약: 총 쿼터 vs 목표 쿼터
+  let totalTargetQ = 0;
+  let totalAllocatedQ = 0;
   players.forEach(p => {
     if (!p.present || !p.name) return;
-    const t = (p.targetQ || 0) * 2;
-    totalTargetSlots += t;
-    totalAllocatedSlots += p.allocatedSlots;
+    totalTargetQ += (p.targetQ || 0);
+    totalAllocatedQ += (p.allocatedQuarters || 0);
   });
 
   const summary = document.getElementById("summary");
-  const diff = totalAllocatedSlots - totalTargetSlots; // +면 더 많이 배정됨
+  const diff = totalAllocatedQ - totalTargetQ;
   summary.innerHTML =
-    `총 슬롯: ${totalAllocatedSlots/2}쿼터 인분 / 목표: ${totalTargetSlots/2}쿼터 인분 ` +
-    `(차이: ${diff/2}쿼터)`;
+    `총 출전: ${totalAllocatedQ}Q / 목표: ${totalTargetQ}Q (차이: ${diff}Q)`;
 
-  // 참석 인원별 실제 출전 쿼터 표시
+  // 선수별 출전 쿼터
   const playerQuartersDiv = document.getElementById("playerQuarters");
   const lines = [];
   players.forEach(p => {
     if (!p.present || !p.name) return;
-    const qPlayed = p.allocatedSlots / 2;
+    const qPlayed = p.allocatedQuarters || 0;
     lines.push(`${p.name}: ${qPlayed}Q`);
   });
   playerQuartersDiv.textContent = lines.length
