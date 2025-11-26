@@ -123,29 +123,29 @@
     <label>
       1쿼 포메이션
       <select id="fQ1">
-        <option value="4-back" selected>4-back (4-3-3)</option>
-        <option value="3-back">3-back (3-5-1)</option>
+        <option value="4-back" selected>4-back (10명=4-2-3, 11명=4-3-3)</option>
+        <option value="3-back">3-back (10명=3-5-1, 11명=3-4-3)</option>
       </select>
     </label>
     <label>
       2쿼 포메이션
       <select id="fQ2">
-        <option value="4-back" selected>4-back (4-3-3)</option>
-        <option value="3-back">3-back (3-5-1)</option>
+        <option value="4-back" selected>4-back (10명=4-2-3, 11명=4-3-3)</option>
+        <option value="3-back">3-back (10명=3-5-1, 11명=3-4-3)</option>
       </select>
     </label>
     <label>
       3쿼 포메이션
       <select id="fQ3">
-        <option value="4-back">4-back (4-3-3)</option>
-        <option value="3-back" selected>3-back (3-5-1)</option>
+        <option value="4-back">4-back (10명=4-2-3, 11명=4-3-3)</option>
+        <option value="3-back" selected>3-back (10명=3-5-1, 11명=3-4-3)</option>
       </select>
     </label>
     <label>
       4쿼 포메이션
       <select id="fQ4">
-        <option value="4-back">4-back (4-3-3)</option>
-        <option value="3-back" selected>3-back (3-5-1)</option>
+        <option value="4-back">4-back (10명=4-2-3, 11명=4-3-3)</option>
+        <option value="3-back" selected>3-back (10명=3-5-1, 11명=3-4-3)</option>
       </select>
     </label>
 
@@ -218,25 +218,54 @@ const initialPlayers = [
   { name: "호균",  main: "DM", sub1: "CM", sub2: "AM" }
 ];
 
-// 포메이션 정의: 그리드 = [행][열]에 포지션 이름(또는 null)
+/**
+ * 포메이션 정의 (인원수 + 백 기준)
+ * 키: '4-back_11', '3-back_11', '4-back_10', '3-back_10'
+ * grid에는 GK 포함한 전체 포지션 구성이 들어있음.
+ */
 const FORMATIONS = {
-  "4-back": {
+  // 11명용 4백: 4-3-3 (GK + 4DF + 3MF + 3FW)
+  "4-back_11": {
     label: "4-3-3",
     grid: [
-      [ null,  "CF",  null ],
-      [ "LW",  "AM",  "RW" ],
-      [ "LB",  "LCB", "RCB", "RB" ],
-      [ null,  "GK",  null ]
+      [ null, "CF",  null ],
+      [ "LW", null,  "RW" ],
+      [ "LCM","DM", "RCM"],
+      [ "LB", "LCB","RCB","RB" ],
+      [ null, "GK", null ]
     ]
   },
-  "3-back": {
+  // 11명용 3백: 3-4-3 (GK + 3DF + 4MF + 3FW)
+  "3-back_11": {
+    label: "3-4-3",
+    grid: [
+      [ null, "CF",  null ],
+      [ "LW", null,  "RW" ],
+      [ "LM", "LCM","RCM","RM" ],
+      [ null, "LCB","CB","RCB" ],
+      [ null, "GK", null ]
+    ]
+  },
+  // 10명용 4백: 4-2-3 (GK + 4DF + 2MF + 3FW)
+  "4-back_10": {
+    label: "4-2-3",
+    grid: [
+      [ null, "CF",  null ],
+      [ "LW", null,  "RW" ],
+      [ "DM", "CM", null ],
+      [ "LB", "LCB","RCB","RB" ],
+      [ null, "GK", null ]
+    ]
+  },
+  // 10명용 3백: 3-5-1 (GK + 3DF + 5MF + 1FW)
+  "3-back_10": {
     label: "3-5-1",
     grid: [
-      [ null,  "CF",  null ],
-      [ "LM",  "AM",  "RM" ],
-      [ "LCM", "DM",  "RCM" ],
-      [ null,  "LCB", "CB", "RCB" ],
-      [ null,  "GK",  null ]
+      [ null, "CF",  null ],
+      [ "LM", "LCM","RCM","RM" ],
+      [ null, "DM",  null ],
+      [ null, "LCB","CB","RCB" ],
+      [ null, "GK", null ]
     ]
   }
 };
@@ -250,6 +279,11 @@ function flattenPositions(grid) {
     });
   });
   return list;
+}
+
+// playersPerSide(10/11) + "4-back"/"3-back" → FORMATIONS 키
+function resolveFormationKey(playersPerSide, baseType) {
+  return `${baseType}_${playersPerSide}`;
 }
 
 /* =========================
@@ -365,30 +399,35 @@ function renderQuarterCards() {
 
 /* =========================
    3. 라인업 생성 로직
-   - 0.5쿼터 단위 슬롯 만들고 Greedy하게 배분
    ========================= */
 
 function generateLineup() {
   // 1) UI 값 반영
   const playersPerSide = Number(document.getElementById("playersPerSide").value);
-  const formationsByQuarter = {
-    1: document.getElementById("fQ1").value,
+  const baseFormationByQuarter = {
+    1: document.getElementById("fQ1").value, // "4-back" or "3-back"
     2: document.getElementById("fQ2").value,
     3: document.getElementById("fQ3").value,
     4: document.getElementById("fQ4").value
   };
+
+  // 쿼터별 실제 포메이션 키 ('4-back_11' 등)
+  const formationKeyByQuarter = {};
+  for (let q=1;q<=4;q++) {
+    formationKeyByQuarter[q] = resolveFormationKey(playersPerSide, baseFormationByQuarter[q]);
+  }
 
   // 선수별 상태 초기화
   players.forEach(p => {
     p.allocatedSlots = 0;
   });
 
-  // 2) 슬롯 목록 생성
+  // 2) 슬롯 목록 생성 (쿼터 × 포지션 × 전/후반)
   const slots = [];
   for (let q=1;q<=4;q++) {
-    const formKey = formationsByQuarter[q];
+    const formKey = formationKeyByQuarter[q];
     const form = FORMATIONS[formKey];
-    const positions = flattenPositions(form.grid).slice(0, playersPerSide); // 10/11명만 사용
+    const positions = flattenPositions(form.grid); // 이미 인원수에 맞게 설계됨
 
     ["A","B"].forEach(half => {
       positions.forEach((pos, posIndex) => {
@@ -417,7 +456,7 @@ function generateLineup() {
   });
 
   // 4) 결과 렌더링
-  renderResult(slots, formationsByQuarter, playersPerSide);
+  renderResult(slots, formationKeyByQuarter, playersPerSide);
 }
 
 function scorePlayerForSlot(p, slot) {
@@ -429,7 +468,7 @@ function scorePlayerForSlot(p, slot) {
   const targetSlots = (p.targetQ || 0) * 2;
   if (targetSlots <= 0) return -1e12;
 
-  // 이미 목표 슬롯을 꽉 채웠으면 우선순위 크게 낮춤
+  // 이미 목표 슬롯을 꽉 채웠으면 우선순위 낮춤
   if (p.allocatedSlots >= targetSlots) return -1e9;
 
   let score = 0;
@@ -450,7 +489,7 @@ function scorePlayerForSlot(p, slot) {
    4. 결과 테이블 렌더링
    ========================= */
 
-function renderResult(slots, formationsByQuarter, playersPerSide) {
+function renderResult(slots, formationKeyByQuarter, playersPerSide) {
   // 쿼터/포지션별 A/B 이름 집계
   const result = {}; // { q: { pos: {A:name, B:name} } }
 
@@ -468,9 +507,9 @@ function renderResult(slots, formationsByQuarter, playersPerSide) {
 
   // 쿼터별 테이블 채우기
   for (let q=1;q<=4;q++) {
-    const formKey = formationsByQuarter[q];
+    const formKey = formationKeyByQuarter[q];
     const form = FORMATIONS[formKey];
-    const positions = flattenPositions(form.grid).slice(0, playersPerSide);
+    const positions = flattenPositions(form.grid);
 
     const tbody = document.getElementById(`tbodyQ${q}`);
     tbody.innerHTML = "";
@@ -487,7 +526,7 @@ function renderResult(slots, formationsByQuarter, playersPerSide) {
     });
 
     const badge = document.getElementById(`badgeQ${q}`);
-    badge.textContent = FORMATIONS[formKey].label;
+    badge.textContent = form.label;
   }
 
   // 전체 요약: 총 슬롯 vs 목표 슬롯
