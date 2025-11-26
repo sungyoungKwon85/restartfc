@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>아마추어 팀 자동 라인업</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 12px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    h2 {
+      font-size: 18px;
+      margin-top: 20px;
+      margin-bottom: 6px;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      align-items: center;
+      margin-bottom: 16px;
+      padding: 8px;
+      border-radius: 8px;
+      background: #f5f5f5;
+    }
+    label {
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    select, input[type="number"] {
+      font-size: 12px;
+    }
+    button {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      background: #2b7cff;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:active {
+      transform: scale(0.98);
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 12px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 4px 6px;
+      text-align: center;
+    }
+    th {
+      background: #fafafa;
+    }
+    .players-table {
+      max-height: 260px;
+      overflow: auto;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .q-wrapper {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .q-card {
+      border-radius: 8px;
+      padding: 6px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+    }
+    .q-card h3 {
+      font-size: 14px;
+      margin: 0 0 4px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      background: #e5e7eb;
+      margin-left: 4px;
+    }
+    .note {
+      font-size: 11px;
+      color: #666;
+      margin-top: 4px;
+    }
+    @media (max-width: 600px) {
+      body { padding: 8px; }
+      .controls { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <h1>아마추어 팀 자동 라인업</h1>
+
+  <!-- 상단 설정 영역 -->
+  <div class="controls">
+    <label>
+      출전 인원 (한 팀)
+      <select id="playersPerSide">
+        <option value="10">10 : 10</option>
+        <option value="11" selected>11 : 11</option>
+      </select>
+    </label>
+
+    <label>
+      1쿼 포메이션
+      <select id="fQ1">
+        <option value="4-back" selected>4-back (4-3-3)</option>
+        <option value="3-back">3-back (3-5-1)</option>
+      </select>
+    </label>
+    <label>
+      2쿼 포메이션
+      <select id="fQ2">
+        <option value="4-back" selected>4-back (4-3-3)</option>
+        <option value="3-back">3-back (3-5-1)</option>
+      </select>
+    </label>
+    <label>
+      3쿼 포메이션
+      <select id="fQ3">
+        <option value="4-back">4-back (4-3-3)</option>
+        <option value="3-back" selected>3-back (3-5-1)</option>
+      </select>
+    </label>
+    <label>
+      4쿼 포메이션
+      <select id="fQ4">
+        <option value="4-back">4-back (4-3-3)</option>
+        <option value="3-back" selected>3-back (3-5-1)</option>
+      </select>
+    </label>
+
+    <button onclick="generateLineup()">라인업 생성</button>
+  </div>
+
+  <!-- 선수 설정 표 -->
+  <h2>선수 / 출전 설정</h2>
+  <div class="players-table">
+    <table id="playersTable">
+      <thead>
+        <tr>
+          <th>참석</th>
+          <th>이름</th>
+          <th>주포지션</th>
+          <th>서브1</th>
+          <th>서브2</th>
+          <th>목표 쿼터</th>
+          <th>시작Q</th>
+          <th>종료Q</th>
+        </tr>
+      </thead>
+      <tbody>
+      <!-- JS에서 채움 -->
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    · 목표 쿼터는 0.5 단위 입력 가능 (예: 2.5)<br>
+    · 시작/종료Q는 지각/조퇴 반영용. 비워두면 1~4 전체로 처리.
+  </div>
+
+  <!-- 결과 영역 -->
+  <h2>쿼터별 라인업 결과</h2>
+  <div id="summary" class="note"></div>
+  <div class="q-wrapper" id="quartersContainer">
+    <!-- JS에서 각 쿼터 카드 생성 -->
+  </div>
+
+<script>
+/* =========================
+   1. 메타데이터 (선수 & 포메이션)
+   ========================= */
+
+// 엑셀에 있던 선수/포지션 정보를 코드로 옮긴 것
+const initialPlayers = [
+  { name: "상준",  main: "LW", sub1: "RW", sub2: "AM" },
+  { name: "태호",  main: "LW", sub1: "RW", sub2: ""  },
+  { name: "영철",  main: "CB", sub1: "CM", sub2: ""  },
+  { name: "규민",  main: "RB", sub1: "RW", sub2: "LB" },
+  { name: "승현",  main: "CM", sub1: "AM", sub2: "DM" },
+  { name: "김재현", main: "DM", sub1: "CM", sub2: "CB" },
+  { name: "봉준",  main: "DM", sub1: "CM", sub2: "CB" },
+  { name: "희환",  main: "CB", sub1: "RB", sub2: "LB" },
+  { name: "성일",  main: "CB", sub1: "RB", sub2: "LB" },
+  { name: "이재현",main: "GK", sub1: "LB", sub2: "RB" },
+  { name: "연수",  main: "LB", sub1: "RB", sub2: "CM" },
+  { name: "시원",  main: "CB", sub1: "RB", sub2: "DM" },
+  { name: "지환",  main: "GK", sub1: "",   sub2: ""   },
+  { name: "성영",  main: "LB", sub1: "RB", sub2: "RW" },
+  { name: "종규",  main: "AM", sub1: "CM", sub2: "LW" },
+  { name: "영현",  main: "RB", sub1: "LB", sub2: "RW" },
+  { name: "명렬",  main: "DM", sub1: "CM", sub2: "CB" },
+  { name: "성원",  main: "CF", sub1: "CM", sub2: "RW" },
+  { name: "수형",  main: "RW", sub1: "AM", sub2: "LW" },
+  { name: "시훈",  main: "CF", sub1: "AM", sub2: "CB" },
+  { name: "광경",  main: "LW", sub1: "RW", sub2: "RB" },
+  { name: "용락",  main: "CM", sub1: "DM", sub2: "CB" },
+  { name: "현일",  main: "CF", sub1: "CB", sub2: ""   },
+  { name: "호균",  main: "DM", sub1: "CM", sub2: "AM" }
+];
+
+// 포메이션 정의: 그리드 = [행][열]에 포지션 이름(또는 null)
+const FORMATIONS = {
+  "4-back": {
+    label: "4-3-3",
+    grid: [
+      [ null,  "CF",  null ],
+      [ "LW",  "AM",  "RW" ],
+      [ "LB",  "LCB", "RCB", "RB" ],
+      [ null,  "GK",  null ]
+    ]
+  },
+  "3-back": {
+    label: "3-5-1",
+    grid: [
+      [ null,  "CF",  null ],
+      [ "LM",  "AM",  "RM" ],
+      [ "LCM", "DM",  "RCM" ],
+      [ null,  "LCB", "CB", "RCB" ],
+      [ null,  "GK",  null ]
+    ]
+  }
+};
+
+// 유틸: 포메이션의 포지션 목록 (중복 없이)
+function flattenPositions(grid) {
+  const list = [];
+  grid.forEach(row => {
+    row.forEach(p => {
+      if (p && !list.includes(p)) list.push(p);
+    });
+  });
+  return list;
+}
+
+/* =========================
+   2. 화면 초기 렌더링
+   ========================= */
+
+let players = []; // 이번 경기 설정이 적용된 플레이어 배열
+
+function init() {
+  // initialPlayers 를 기반으로 기본값 세팅
+  players = initialPlayers.map(p => ({
+    ...p,
+    present: true,
+    targetQ: 3,    // 기본 3쿼터
+    startQ: 1,
+    endQ: 4,
+    allocatedSlots: 0
+  }));
+
+  renderPlayersTable();
+  renderQuarterCards();
+}
+
+function renderPlayersTable() {
+  const tbody = document.querySelector("#playersTable tbody");
+  tbody.innerHTML = "";
+  players.forEach((p, idx) => {
+    const tr = document.createElement("tr");
+
+    // 참석 체크박스
+    const tdPresent = document.createElement("td");
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = p.present;
+    chk.onchange = () => p.present = chk.checked;
+    tdPresent.appendChild(chk);
+    tr.appendChild(tdPresent);
+
+    // 이름
+    const tdName = document.createElement("td");
+    tdName.textContent = p.name;
+    tr.appendChild(tdName);
+
+    // 포지션들
+    ["main","sub1","sub2"].forEach(key => {
+      const td = document.createElement("td");
+      td.textContent = p[key] || "";
+      tr.appendChild(td);
+    });
+
+    // 목표 쿼터
+    const tdTarget = document.createElement("td");
+    const inputTarget = document.createElement("input");
+    inputTarget.type = "number";
+    inputTarget.step = "0.5";
+    inputTarget.min = "0";
+    inputTarget.value = p.targetQ;
+    inputTarget.style.width = "50px";
+    inputTarget.onchange = () => p.targetQ = Number(inputTarget.value) || 0;
+    tdTarget.appendChild(inputTarget);
+    tr.appendChild(tdTarget);
+
+    // 시작Q
+    const tdStart = document.createElement("td");
+    const inputStart = document.createElement("input");
+    inputStart.type = "number";
+    inputStart.min = "1";
+    inputStart.max = "4";
+    inputStart.value = p.startQ;
+    inputStart.style.width = "40px";
+    inputStart.onchange = () => p.startQ = Number(inputStart.value) || 1;
+    tdStart.appendChild(inputStart);
+    tr.appendChild(tdStart);
+
+    // 종료Q
+    const tdEnd = document.createElement("td");
+    const inputEnd = document.createElement("input");
+    inputEnd.type = "number";
+    inputEnd.min = "1";
+    inputEnd.max = "4";
+    inputEnd.value = p.endQ;
+    inputEnd.style.width = "40px";
+    inputEnd.onchange = () => p.endQ = Number(inputEnd.value) || 4;
+    tdEnd.appendChild(inputEnd);
+    tr.appendChild(tdEnd);
+
+    tbody.appendChild(tr);
+  });
+}
+
+function renderQuarterCards() {
+  const container = document.getElementById("quartersContainer");
+  container.innerHTML = "";
+  for (let q=1;q<=4;q++) {
+    const card = document.createElement("div");
+    card.className = "q-card";
+    card.id = `cardQ${q}`;
+    const h3 = document.createElement("h3");
+    h3.innerHTML = `${q}Q <span class="badge" id="badgeQ${q}"></span>`;
+    card.appendChild(h3);
+
+    const table = document.createElement("table");
+    table.innerHTML = `
+      <thead>
+        <tr><th>포지션</th><th>전반(A)</th><th>후반(B)</th></tr>
+      </thead>
+      <tbody id="tbodyQ${q}"></tbody>
+    `;
+    card.appendChild(table);
+    container.appendChild(card);
+  }
+}
+
+/* =========================
+   3. 라인업 생성 로직
+   - 0.5쿼터 단위 슬롯 만들고 Greedy하게 배분
+   ========================= */
+
+function generateLineup() {
+  // 1) UI 값 반영
+  const playersPerSide = Number(document.getElementById("playersPerSide").value);
+  const formationsByQuarter = {
+    1: document.getElementById("fQ1").value,
+    2: document.getElementById("fQ2").value,
+    3: document.getElementById("fQ3").value,
+    4: document.getElementById("fQ4").value
+  };
+
+  // 선수별 상태 초기화
+  players.forEach(p => {
+    p.allocatedSlots = 0;
+  });
+
+  // 2) 슬롯 목록 생성
+  const slots = [];
+  for (let q=1;q<=4;q++) {
+    const formKey = formationsByQuarter[q];
+    const form = FORMATIONS[formKey];
+    const positions = flattenPositions(form.grid).slice(0, playersPerSide); // 10/11명만 사용
+
+    ["A","B"].forEach(half => {
+      positions.forEach((pos, posIndex) => {
+        slots.push({ quarter:q, half, position:pos, posIndex, playerIndex:null });
+      });
+    });
+  }
+
+  // 3) Greedy 배분
+  slots.forEach(slot => {
+    let bestIdx = -1;
+    let bestScore = -1e15;
+
+    players.forEach((p, idx) => {
+      const score = scorePlayerForSlot(p, slot);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = idx;
+      }
+    });
+
+    if (bestIdx >= 0 && bestScore > -1e10) {
+      slot.playerIndex = bestIdx;
+      players[bestIdx].allocatedSlots += 1; // 0.5쿼터
+    }
+  });
+
+  // 4) 결과 렌더링
+  renderResult(slots, formationsByQuarter, playersPerSide);
+}
+
+function scorePlayerForSlot(p, slot) {
+  if (!p.present) return -1e12;
+
+  // 쿼터 범위 체크
+  if (slot.quarter < p.startQ || slot.quarter > p.endQ) return -1e12;
+
+  const targetSlots = (p.targetQ || 0) * 2;
+  if (targetSlots <= 0) return -1e12;
+
+  // 이미 목표 슬롯을 꽉 채웠으면 우선순위 크게 낮춤
+  if (p.allocatedSlots >= targetSlots) return -1e9;
+
+  let score = 0;
+
+  if (slot.position === p.main)      score += 100;
+  else if (slot.position === p.sub1) score += 70;
+  else if (slot.position === p.sub2) score += 50;
+  else                               score += 5;   // 포지션 안맞지만 사람이 없을때용
+
+  // 덜 뛴 사람에게 가산점
+  const remain = targetSlots - p.allocatedSlots;
+  score += remain;
+
+  return score;
+}
+
+/* =========================
+   4. 결과 테이블 렌더링
+   ========================= */
+
+function renderResult(slots, formationsByQuarter, playersPerSide) {
+  // 쿼터/포지션별 A/B 이름 집계
+  const result = {}; // { q: { pos: {A:name, B:name} } }
+
+  for (let q=1;q<=4;q++) {
+    result[q] = {};
+  }
+
+  slots.forEach(slot => {
+    const q = slot.quarter;
+    const pos = slot.position;
+    const playerName = slot.playerIndex != null ? players[slot.playerIndex].name : "";
+    if (!result[q][pos]) result[q][pos] = {A:"",B:""};
+    result[q][pos][slot.half] = playerName;
+  });
+
+  // 쿼터별 테이블 채우기
+  for (let q=1;q<=4;q++) {
+    const formKey = formationsByQuarter[q];
+    const form = FORMATIONS[formKey];
+    const positions = flattenPositions(form.grid).slice(0, playersPerSide);
+
+    const tbody = document.getElementById(`tbodyQ${q}`);
+    tbody.innerHTML = "";
+
+    positions.forEach(pos => {
+      const rowData = result[q][pos] || {A:"",B:""};
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${pos}</td>
+        <td>${rowData.A || "-"}</td>
+        <td>${rowData.B || "-"}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    const badge = document.getElementById(`badgeQ${q}`);
+    badge.textContent = FORMATIONS[formKey].label;
+  }
+
+  // 전체 요약: 총 슬롯 vs 목표 슬롯
+  let totalTargetSlots = 0;
+  let totalAllocatedSlots = 0;
+  players.forEach(p => {
+    if (!p.present) return;
+    const t = (p.targetQ || 0) * 2;
+    totalTargetSlots += t;
+    totalAllocatedSlots += p.allocatedSlots;
+  });
+
+  const summary = document.getElementById("summary");
+  const diff = totalAllocatedSlots - totalTargetSlots; // +면 더 많이 배정됨
+  summary.innerHTML =
+    `총 슬롯: ${totalAllocatedSlots/2}쿼터 인분 / 목표: ${totalTargetSlots/2}쿼터 인분 `
+    + `(차이: ${diff/2}쿼터)`;
+}
+
+/* =========================
+   5. 초기 실행
+   ========================= */
+init();
+</script>
+</body>
+</html>
