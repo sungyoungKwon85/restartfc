@@ -270,7 +270,6 @@
    1. 메타데이터 (선수 & 포지션 & 포메이션)
    ========================= */
 
-// 네가 정리해준 포지션 버전
 const initialPlayersTemplate = [
   { name: "지환",   main: "GK", sub1: "",   sub2: ""   },
   { name: "이재현", main: "GK", sub1: "WB", sub2: "CB" },
@@ -303,10 +302,10 @@ const initialPlayersTemplate = [
   { name: "현일",   main: "CF", sub1: "CF", sub2: "CB" }
 ];
 
-// localStorage key (버전 업)
-const STORAGE_KEY = "restartfc_players_v8";
+// localStorage key
+const STORAGE_KEY = "restartfc_players_v9";
 
-// 포메이션 정의
+// 포메이션 정의 (각 칸은 독립 슬롯)
 const FORMATIONS = {
   "4-back_11": {
     label: "4-3-3",
@@ -365,16 +364,6 @@ function getPositionRank(pos) {
 
 function resolveFormationKey(playersPerSide, baseType) {
   return `${baseType}_${playersPerSide}`;
-}
-
-function flattenPositions(grid) {
-  const list = [];
-  grid.forEach(row => {
-    row.forEach(p => {
-      if (p && !list.includes(p)) list.push(p);
-    });
-  });
-  return list;
 }
 
 /* =========================
@@ -603,7 +592,7 @@ function resetPlayers() {
 }
 
 /* =========================
-   5. 라인업 생성 로직 (쿼터당 1회 배정 보장)
+   5. 라인업 생성 로직 (각 칸 = 독립 슬롯, 쿼터당 1회 배정 보장)
    ========================= */
 
 function generateLineup() {
@@ -620,73 +609,67 @@ function generateLineup() {
     formationKeyByQuarter[q] = resolveFormationKey(playersPerSide, baseFormationByQuarter[q]);
   }
 
-  players.forEach(p => {
-    p.allocatedQuarters = 0;
-  });
+  // 초기화
+  players.forEach(p => { p.allocatedQuarters = 0; });
 
-  // 이 Set 덕분에 "한 쿼터에 한 번만" 확실히 보장
-  const assignedByQuarter = {
-    1: new Set(),
-    2: new Set(),
-    3: new Set(),
-    4: new Set()
-  };
-
+  const assignedByQuarter = { 1:new Set(), 2:new Set(), 3:new Set(), 4:new Set() };
   let lastGkIndex = null;
-  const slots = [];
+
+  const slots = []; // {quarter, row, col, position, playerIndex}
 
   for (let q=1;q<=4;q++) {
     const formKey = formationKeyByQuarter[q];
     const form = FORMATIONS[formKey];
     if (!form) continue;
-    const positions = flattenPositions(form.grid);
+    const grid = form.grid;
 
-    positions.forEach(pos => {
-      let bestIdx = -1;
-      let bestScore = -1e15;
+    for (let r=0; r<grid.length; r++) {
+      const row = grid[r];
+      for (let c=0; c<row.length; c++) {
+        const pos = row[c];
+        if (!pos) continue;
 
-      players.forEach((p, idx) => {
-        // 이미 이 쿼터에 배정된 선수는 아예 후보에서 제외
-        if (assignedByQuarter[q].has(idx)) return;
+        let bestIdx = -1;
+        let bestScore = -1e15;
 
-        const score = scorePlayerForSlotQuarter(p, idx, q, pos, lastGkIndex);
-        if (score > bestScore) {
-          bestScore = score;
-          bestIdx = idx;
+        players.forEach((p, idx) => {
+          // 이미 이 쿼터에서 뛴 선수면 패스
+          if (assignedByQuarter[q].has(idx)) return;
+
+          const score = scorePlayerForSlotQuarter(p, idx, q, pos, lastGkIndex);
+          if (score > bestScore) {
+            bestScore = score;
+            bestIdx = idx;
+          }
+        });
+
+        if (bestIdx >= 0 && bestScore > -1e10) {
+          slots.push({ quarter: q, row: r, col: c, position: pos, playerIndex: bestIdx });
+          players[bestIdx].allocatedQuarters += 1;
+          assignedByQuarter[q].add(bestIdx);
+          if (pos === "GK") lastGkIndex = bestIdx;
+        } else {
+          slots.push({ quarter: q, row: r, col: c, position: pos, playerIndex: null });
         }
-      });
-
-      if (bestIdx >= 0 && bestScore > -1e10) {
-        slots.push({ quarter: q, position: pos, playerIndex: bestIdx });
-        players[bestIdx].allocatedQuarters += 1;
-        assignedByQuarter[q].add(bestIdx);
-        if (pos === "GK") {
-          lastGkIndex = bestIdx;
-        }
-      } else {
-        slots.push({ quarter: q, position: pos, playerIndex: null });
       }
-    });
+    }
   }
 
   renderResult(slots, formationKeyByQuarter);
 }
 
 /**
- * 점수 계산: 포지션/목표쿼터/시간대 + GK 연속 가중치
- * (여기서는 "이 쿼터에 이미 뛴 선수" 체크는 하지 않는다)
+ * 점수 계산 (한 쿼터 내 중복 여부는 generateLineup 쪽에서 막음)
  */
 function scorePlayerForSlotQuarter(p, playerIndex, quarter, position, lastGkIndex) {
   if (!p.present) return -1e12;
   if (!p.name) return -1e12;
-
   if (quarter < p.startQ || quarter > p.endQ) return -1e12;
 
   const targetQ = p.targetQ || 0;
   if (targetQ <= 0) return -1e12;
 
   let score = 0;
-
   const posCat = posCategory(position);
   const mainCat = posCategory(p.main);
   const sub1Cat = posCategory(p.sub1);
@@ -701,9 +684,7 @@ function scorePlayerForSlotQuarter(p, playerIndex, quarter, position, lastGkInde
     else if (p.sub1 === "GK" || p.sub2 === "GK") gkBase = 150;
     score += gkBase;
 
-    if (lastGkIndex === playerIndex) {
-      score += 80; // 같은 GK가 계속 뛰도록
-    }
+    if (lastGkIndex === playerIndex) score += 80;
   } else {
     if (posCat && posCat === mainCat) {
       score += 100;
@@ -722,24 +703,35 @@ function scorePlayerForSlotQuarter(p, playerIndex, quarter, position, lastGkInde
   if (remain > 0) {
     score += remain * 20;
   } else if (remain < 0) {
-    score += remain * 10; // 음수 페널티
+    score += remain * 10;
   }
 
   return score;
 }
 
 /* =========================
-   6. 결과 렌더링
+   6. 결과 렌더링 (row,col 기준으로 이름 표시)
    ========================= */
 
 function renderResult(slots, formationKeyByQuarter) {
-  const resultByQuarter = { 1:{}, 2:{}, 3:{}, 4:{} };
+  // 쿼터별 (row,col) -> name 매핑
+  const nameGridByQuarter = { 1: null, 2: null, 3: null, 4: null };
+
+  for (let q=1;q<=4;q++) {
+    const formKey = formationKeyByQuarter[q];
+    const form = FORMATIONS[formKey];
+    if (!form) continue;
+    const grid = form.grid;
+    // 동일한 사이즈의 이름 그리드 생성
+    nameGridByQuarter[q] = grid.map(row => row.map(() => ""));
+  }
 
   slots.forEach(slot => {
+    if (slot.playerIndex == null) return;
     const q = slot.quarter;
-    const pos = slot.position;
-    const name = (slot.playerIndex != null) ? players[slot.playerIndex].name : "";
-    resultByQuarter[q][pos] = name || "";
+    const ng = nameGridByQuarter[q];
+    if (!ng) return;
+    ng[slot.row][slot.col] = players[slot.playerIndex].name || "";
   });
 
   for (let q=1;q<=4;q++) {
@@ -747,20 +739,23 @@ function renderResult(slots, formationKeyByQuarter) {
     const form = FORMATIONS[formKey];
     const pitch = document.getElementById(`pitchQ${q}`);
     const badge = document.getElementById(`badgeQ${q}`);
+    const ng = nameGridByQuarter[q];
 
-    if (!form || !pitch || !badge) continue;
+    if (!form || !pitch || !badge || !ng) continue;
 
     badge.textContent = form.label;
     pitch.innerHTML = "";
 
-    form.grid.forEach(row => {
+    const grid = form.grid;
+    for (let r=0; r<grid.length; r++) {
       const rowDiv = document.createElement("div");
       rowDiv.className = "pitch-row";
-      row.forEach(pos => {
+      for (let c=0; c<grid[r].length; c++) {
+        const pos = grid[r][c];
         const cell = document.createElement("div");
         cell.className = "pitch-cell";
         if (pos) {
-          const name = resultByQuarter[q][pos] || "-";
+          const name = ng[r][c] || "-";
           const posDiv = document.createElement("div");
           posDiv.className = "pitch-pos";
           posDiv.textContent = pos;
@@ -771,9 +766,9 @@ function renderResult(slots, formationKeyByQuarter) {
           cell.appendChild(nameDiv);
         }
         rowDiv.appendChild(cell);
-      });
+      }
       pitch.appendChild(rowDiv);
-    });
+    }
   }
 
   let totalTargetQ = 0;
