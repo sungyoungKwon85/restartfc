@@ -36,7 +36,7 @@
       align-items: center;
       gap: 4px;
     }
-    select, input[type="number"] {
+    select, input[type="number"], input[type="text"] {
       font-size: 12px;
     }
     button {
@@ -51,6 +51,9 @@
     }
     button:active {
       transform: scale(0.98);
+    }
+    .btn-secondary {
+      background: #6b7280;
     }
     table {
       border-collapse: collapse;
@@ -70,7 +73,7 @@
       overflow: auto;
       border: 1px solid #ddd;
       border-radius: 6px;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
     .q-wrapper {
       display: grid;
@@ -100,6 +103,20 @@
       font-size: 11px;
       color: #666;
       margin-top: 4px;
+    }
+    .text-right {
+      text-align: right;
+    }
+    .icon-btn {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      padding: 2px 4px;
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    .icon-btn:hover {
+      color: #ef4444;
     }
     @media (max-width: 600px) {
       body { padding: 8px; }
@@ -152,6 +169,26 @@
     <button onclick="generateLineup()">라인업 생성</button>
   </div>
 
+  <!-- 포지션 자동완성용 datalist -->
+  <datalist id="positionList">
+    <option value="GK"></option>
+    <option value="LB"></option>
+    <option value="LCB"></option>
+    <option value="CB"></option>
+    <option value="RCB"></option>
+    <option value="RB"></option>
+    <option value="DM"></option>
+    <option value="CM"></option>
+    <option value="LCM"></option>
+    <option value="RCM"></option>
+    <option value="LM"></option>
+    <option value="RM"></option>
+    <option value="AM"></option>
+    <option value="LW"></option>
+    <option value="RW"></option>
+    <option value="CF"></option>
+  </datalist>
+
   <!-- 선수 설정 표 -->
   <h2>선수 / 출전 설정</h2>
   <div class="players-table">
@@ -166,6 +203,7 @@
           <th>목표 쿼터</th>
           <th>시작Q</th>
           <th>종료Q</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -173,9 +211,14 @@
       </tbody>
     </table>
   </div>
+  <div class="text-right" style="margin-bottom:4px;">
+    <button class="btn-secondary" onclick="addPlayer()">선수 추가</button>
+    <button class="btn-secondary" onclick="resetPlayers()">선수 초기화</button>
+  </div>
   <div class="note">
-    · 목표 쿼터는 0.5 단위 입력 가능 (예: 2.5)<br>
-    · 시작/종료Q는 지각/조퇴 반영용. 비워두면 1~4 전체로 처리.
+    · 참석 체크박스를 끄면 그 선수는 이번 경기 배정에서 제외됩니다.<br>
+    · 포지션은 직접 수정하거나, 입력 중에 리스트에서 골라 쓸 수 있습니다.<br>
+    · 목표 쿼터는 0.5 단위 입력 가능 (예: 2.5), 지각/조퇴는 시작Q/종료Q로 조정.
   </div>
 
   <!-- 결과 영역 -->
@@ -190,8 +233,8 @@
    1. 메타데이터 (선수 & 포메이션)
    ========================= */
 
-// 엑셀에 있던 선수/포지션 정보를 코드로 옮긴 것
-const initialPlayers = [
+// 초기 선수 리스트 (최초 1번만 사용, 이후에는 localStorage에서 로딩)
+const initialPlayersTemplate = [
   { name: "상준",  main: "LW", sub1: "RW", sub2: "AM" },
   { name: "태호",  main: "LW", sub1: "RW", sub2: ""  },
   { name: "영철",  main: "CB", sub1: "CM", sub2: ""  },
@@ -218,10 +261,12 @@ const initialPlayers = [
   { name: "호균",  main: "DM", sub1: "CM", sub2: "AM" }
 ];
 
+// localStorage key
+const STORAGE_KEY = "restartfc_players_v1";
+
 /**
  * 포메이션 정의 (인원수 + 백 기준)
  * 키: '4-back_11', '3-back_11', '4-back_10', '3-back_10'
- * grid에는 GK 포함한 전체 포지션 구성이 들어있음.
  */
 const FORMATIONS = {
   // 11명용 4백: 4-3-3 (GK + 4DF + 3MF + 3FW)
@@ -287,19 +332,59 @@ function resolveFormationKey(playersPerSide, baseType) {
 }
 
 /* =========================
-   2. 화면 초기 렌더링
+   2. 선수 데이터 로딩 / 저장
    ========================= */
 
 let players = []; // 이번 경기 설정이 적용된 플레이어 배열
 
+function loadPlayersFromStorage() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed;
+  } catch (e) {
+    console.warn("loadPlayers error", e);
+    return null;
+  }
+}
+
+function savePlayersToStorage() {
+  try {
+    const toSave = players.map(p => ({
+      name: p.name,
+      main: p.main,
+      sub1: p.sub1,
+      sub2: p.sub2,
+      present: p.present,
+      targetQ: p.targetQ,
+      startQ: p.startQ,
+      endQ: p.endQ
+    }));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  } catch (e) {
+    console.warn("savePlayers error", e);
+  }
+}
+
+/* =========================
+   3. 화면 초기 렌더링
+   ========================= */
+
 function init() {
-  // initialPlayers 를 기반으로 기본값 세팅
-  players = initialPlayers.map(p => ({
-    ...p,
-    present: true,
-    targetQ: 3,    // 기본 3쿼터
-    startQ: 1,
-    endQ: 4,
+  const stored = loadPlayersFromStorage();
+  const base = stored && stored.length > 0 ? stored : initialPlayersTemplate;
+
+  players = base.map(p => ({
+    name: p.name || "",
+    main: p.main || "",
+    sub1: p.sub1 || "",
+    sub2: p.sub2 || "",
+    present: p.present !== undefined ? !!p.present : true,
+    targetQ: p.targetQ !== undefined ? Number(p.targetQ) || 3 : 3,
+    startQ: p.startQ !== undefined ? Number(p.startQ) || 1 : 1,
+    endQ: p.endQ !== undefined ? Number(p.endQ) || 4 : 4,
     allocatedSlots: 0
   }));
 
@@ -318,19 +403,39 @@ function renderPlayersTable() {
     const chk = document.createElement("input");
     chk.type = "checkbox";
     chk.checked = p.present;
-    chk.onchange = () => p.present = chk.checked;
+    chk.onchange = () => {
+      p.present = chk.checked;
+      savePlayersToStorage();
+    };
     tdPresent.appendChild(chk);
     tr.appendChild(tdPresent);
 
     // 이름
     const tdName = document.createElement("td");
-    tdName.textContent = p.name;
+    const inputName = document.createElement("input");
+    inputName.type = "text";
+    inputName.value = p.name;
+    inputName.style.width = "80px";
+    inputName.oninput = () => {
+      p.name = inputName.value.trim();
+      savePlayersToStorage();
+    };
+    tdName.appendChild(inputName);
     tr.appendChild(tdName);
 
-    // 포지션들
+    // 포지션들 (텍스트 + datalist)
     ["main","sub1","sub2"].forEach(key => {
       const td = document.createElement("td");
-      td.textContent = p[key] || "";
+      const inputPos = document.createElement("input");
+      inputPos.type = "text";
+      inputPos.setAttribute("list", "positionList");
+      inputPos.value = p[key] || "";
+      inputPos.style.width = "60px";
+      inputPos.oninput = () => {
+        p[key] = inputPos.value.trim().toUpperCase();
+        savePlayersToStorage();
+      };
+      td.appendChild(inputPos);
       tr.appendChild(td);
     });
 
@@ -342,7 +447,10 @@ function renderPlayersTable() {
     inputTarget.min = "0";
     inputTarget.value = p.targetQ;
     inputTarget.style.width = "50px";
-    inputTarget.onchange = () => p.targetQ = Number(inputTarget.value) || 0;
+    inputTarget.onchange = () => {
+      p.targetQ = Number(inputTarget.value) || 0;
+      savePlayersToStorage();
+    };
     tdTarget.appendChild(inputTarget);
     tr.appendChild(tdTarget);
 
@@ -354,7 +462,10 @@ function renderPlayersTable() {
     inputStart.max = "4";
     inputStart.value = p.startQ;
     inputStart.style.width = "40px";
-    inputStart.onchange = () => p.startQ = Number(inputStart.value) || 1;
+    inputStart.onchange = () => {
+      p.startQ = Number(inputStart.value) || 1;
+      savePlayersToStorage();
+    };
     tdStart.appendChild(inputStart);
     tr.appendChild(tdStart);
 
@@ -366,9 +477,28 @@ function renderPlayersTable() {
     inputEnd.max = "4";
     inputEnd.value = p.endQ;
     inputEnd.style.width = "40px";
-    inputEnd.onchange = () => p.endQ = Number(inputEnd.value) || 4;
+    inputEnd.onchange = () => {
+      p.endQ = Number(inputEnd.value) || 4;
+      savePlayersToStorage();
+    };
     tdEnd.appendChild(inputEnd);
     tr.appendChild(tdEnd);
+
+    // 삭제 버튼
+    const tdDel = document.createElement("td");
+    const btnDel = document.createElement("button");
+    btnDel.className = "icon-btn";
+    btnDel.innerHTML = "✕";
+    btnDel.title = "선수 삭제";
+    btnDel.onclick = () => {
+      if (confirm(`${p.name || "이 선수"}를 삭제할까요?`)) {
+        players.splice(idx, 1);
+        savePlayersToStorage();
+        renderPlayersTable();
+      }
+    };
+    tdDel.appendChild(btnDel);
+    tr.appendChild(tdDel);
 
     tbody.appendChild(tr);
   });
@@ -398,11 +528,36 @@ function renderQuarterCards() {
 }
 
 /* =========================
-   3. 라인업 생성 로직
+   4. 선수 추가 / 초기화
+   ========================= */
+
+function addPlayer() {
+  players.push({
+    name: "",
+    main: "",
+    sub1: "",
+    sub2: "",
+    present: true,
+    targetQ: 2,
+    startQ: 1,
+    endQ: 4,
+    allocatedSlots: 0
+  });
+  savePlayersToStorage();
+  renderPlayersTable();
+}
+
+function resetPlayers() {
+  if (!confirm("선수 목록을 처음 상태로 되돌릴까요? (현재 저장된 정보는 사라집니다)")) return;
+  window.localStorage.removeItem(STORAGE_KEY);
+  init();
+}
+
+/* =========================
+   5. 라인업 생성 로직
    ========================= */
 
 function generateLineup() {
-  // 1) UI 값 반영
   const playersPerSide = Number(document.getElementById("playersPerSide").value);
   const baseFormationByQuarter = {
     1: document.getElementById("fQ1").value, // "4-back" or "3-back"
@@ -411,7 +566,7 @@ function generateLineup() {
     4: document.getElementById("fQ4").value
   };
 
-  // 쿼터별 실제 포메이션 키 ('4-back_11' 등)
+  // 쿼터별 실제 포메이션 키
   const formationKeyByQuarter = {};
   for (let q=1;q<=4;q++) {
     formationKeyByQuarter[q] = resolveFormationKey(playersPerSide, baseFormationByQuarter[q]);
@@ -427,7 +582,8 @@ function generateLineup() {
   for (let q=1;q<=4;q++) {
     const formKey = formationKeyByQuarter[q];
     const form = FORMATIONS[formKey];
-    const positions = flattenPositions(form.grid); // 이미 인원수에 맞게 설계됨
+    if (!form) continue;
+    const positions = flattenPositions(form.grid); // 인원수에 맞게 설계됨
 
     ["A","B"].forEach(half => {
       positions.forEach((pos, posIndex) => {
@@ -456,11 +612,12 @@ function generateLineup() {
   });
 
   // 4) 결과 렌더링
-  renderResult(slots, formationKeyByQuarter, playersPerSide);
+  renderResult(slots, formationKeyByQuarter);
 }
 
 function scorePlayerForSlot(p, slot) {
   if (!p.present) return -1e12;
+  if (!p.name) return -1e12;
 
   // 쿼터 범위 체크
   if (slot.quarter < p.startQ || slot.quarter > p.endQ) return -1e12;
@@ -468,7 +625,7 @@ function scorePlayerForSlot(p, slot) {
   const targetSlots = (p.targetQ || 0) * 2;
   if (targetSlots <= 0) return -1e12;
 
-  // 이미 목표 슬롯을 꽉 채웠으면 우선순위 낮춤
+  // 이미 목표 슬롯 다 채웠으면 우선순위 낮춤
   if (p.allocatedSlots >= targetSlots) return -1e9;
 
   let score = 0;
@@ -486,10 +643,10 @@ function scorePlayerForSlot(p, slot) {
 }
 
 /* =========================
-   4. 결과 테이블 렌더링
+   6. 결과 테이블 렌더링
    ========================= */
 
-function renderResult(slots, formationKeyByQuarter, playersPerSide) {
+function renderResult(slots, formationKeyByQuarter) {
   // 쿼터/포지션별 A/B 이름 집계
   const result = {}; // { q: { pos: {A:name, B:name} } }
 
@@ -509,9 +666,16 @@ function renderResult(slots, formationKeyByQuarter, playersPerSide) {
   for (let q=1;q<=4;q++) {
     const formKey = formationKeyByQuarter[q];
     const form = FORMATIONS[formKey];
-    const positions = flattenPositions(form.grid);
-
     const tbody = document.getElementById(`tbodyQ${q}`);
+    const badge = document.getElementById(`badgeQ${q}`);
+
+    if (!form) {
+      if (tbody) tbody.innerHTML = "";
+      if (badge) badge.textContent = "";
+      continue;
+    }
+
+    const positions = flattenPositions(form.grid);
     tbody.innerHTML = "";
 
     positions.forEach(pos => {
@@ -525,7 +689,6 @@ function renderResult(slots, formationKeyByQuarter, playersPerSide) {
       tbody.appendChild(tr);
     });
 
-    const badge = document.getElementById(`badgeQ${q}`);
     badge.textContent = form.label;
   }
 
@@ -533,7 +696,7 @@ function renderResult(slots, formationKeyByQuarter, playersPerSide) {
   let totalTargetSlots = 0;
   let totalAllocatedSlots = 0;
   players.forEach(p => {
-    if (!p.present) return;
+    if (!p.present || !p.name) return;
     const t = (p.targetQ || 0) * 2;
     totalTargetSlots += t;
     totalAllocatedSlots += p.allocatedSlots;
@@ -547,7 +710,7 @@ function renderResult(slots, formationKeyByQuarter, playersPerSide) {
 }
 
 /* =========================
-   5. 초기 실행
+   7. 초기 실행
    ========================= */
 init();
 </script>
