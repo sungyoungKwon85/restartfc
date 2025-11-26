@@ -270,7 +270,7 @@
    1. 메타데이터 (선수 & 포지션 & 포메이션)
    ========================= */
 
-// 초기 선수 리스트 (6개 역할로만 구성)
+// 네가 정리해준 포지션 버전
 const initialPlayersTemplate = [
   { name: "지환",   main: "GK", sub1: "",   sub2: ""   },
   { name: "이재현", main: "GK", sub1: "WB", sub2: "CB" },
@@ -282,12 +282,12 @@ const initialPlayersTemplate = [
   { name: "연수",   main: "WB", sub1: "MF", sub2: "WB" },
   { name: "성영",   main: "WB", sub1: "CB", sub2: "W"  },
   { name: "규민",   main: "WB", sub1: "W",  sub2: "WB" },
-  { name: "영현",   main: "WB", sub1: "W", sub2: "WB"  },
+  { name: "영현",   main: "WB", sub1: "W",  sub2: "WB" },
 
   { name: "호균",   main: "MF", sub1: "MF", sub2: "CB" },
   { name: "명렬",   main: "MF", sub1: "WB", sub2: "CB" },
   { name: "용락",   main: "MF", sub1: "MF", sub2: "CB" },
-  { name: "영철",   main: "MF", sub1: "CF", sub2: "MF"   },
+  { name: "영철",   main: "MF", sub1: "CF", sub2: "MF" },
   { name: "승현",   main: "MF", sub1: "MF", sub2: "MF" },
   { name: "김재현", main: "MF", sub1: "MF", sub2: "CB" },
   { name: "봉준",   main: "MF", sub1: "MF", sub2: "CB" },
@@ -300,18 +300,14 @@ const initialPlayersTemplate = [
 
   { name: "성원",   main: "CF", sub1: "MF", sub2: "W"  },
   { name: "시훈",   main: "CF", sub1: "CF", sub2: "CB" },
-  { name: "현일",   main: "CF", sub1: "CF", sub2: "CB"   }
+  { name: "현일",   main: "CF", sub1: "CF", sub2: "CB" }
 ];
 
-// localStorage key (버전 변경)
-const STORAGE_KEY = "restartfc_players_v7";
+// localStorage key (버전 업)
+const STORAGE_KEY = "restartfc_players_v8";
 
-/**
- * 포메이션 정의 (인원수 + 백 기준)
- * 포지션은 모두 GK / CB / WB / MF / W / CF 로만 구성
- */
+// 포메이션 정의
 const FORMATIONS = {
-  // 11명용 4백: 4-3-3 (10필드 + GK)
   "4-back_11": {
     label: "4-3-3",
     grid: [
@@ -322,7 +318,6 @@ const FORMATIONS = {
       [ null, "GK",  null ]
     ]
   },
-  // 11명용 3백: 3-4-3 (10필드 + GK)
   "3-back_11": {
     label: "3-4-3",
     grid: [
@@ -333,54 +328,45 @@ const FORMATIONS = {
       [ null, "GK",  null ]
     ]
   },
-  // 10명용 4백: 4-2-3 (9필드 + GK)
   "4-back_10": {
     label: "4-2-3",
     grid: [
-      [ null, "CF",  null ],          // 1 (CF)
-      [ "W",  null,  "W"  ],          // +2 = 3 (양 윙)
-      [ "MF", null,  "MF" ],          // +2 = 5 (더블 MF)
-      [ "WB", "CB",  "CB", "WB" ],    // +4 = 9 (4백)
+      [ null, "CF",  null ],
+      [ "W",  null,  "W"  ],
+      [ "MF", null,  "MF" ],
+      [ "WB", "CB",  "CB", "WB" ],
       [ null, "GK",  null ]
     ]
   },
-  // 10명용 3백: 3-5-1 (9필드 + GK)
   "3-back_10": {
     label: "3-5-1",
     grid: [
-      [ null, "CF",  null ],                  // 1
-      [ "MF", "MF", "MF", "MF", "MF" ],       // +5 = 6
-      [ null, "CB", "CB", "CB" ],             // +3 = 9
+      [ null, "CF",  null ],
+      [ "MF", "MF", "MF", "MF", "MF" ],
+      [ null, "CB", "CB", "CB" ],
       [ null, "GK", null ]
     ]
   }
 };
 
-// 카테고리(=포지션) 리스트
 const POSITION_CATEGORY_ORDER = ["GK","CB","WB","MF","W","CF"];
 
-/**
- * 포지션이 6개 역할 중 하나인지 확인하고 그대로 리턴
- */
 function posCategory(pos) {
   if (!pos) return "";
   pos = pos.toUpperCase();
   return POSITION_CATEGORY_ORDER.includes(pos) ? pos : "";
 }
 
-// 정렬용 랭크
 function getPositionRank(pos) {
   const cat = posCategory(pos);
   const idx = POSITION_CATEGORY_ORDER.indexOf(cat);
   return idx === -1 ? 999 : idx;
 }
 
-// playersPerSide(10/11) + "4-back"/"3-back" → FORMATIONS 키
 function resolveFormationKey(playersPerSide, baseType) {
   return `${baseType}_${playersPerSide}`;
 }
 
-// 포메이션의 포지션 목록 (중복 없이)
 function flattenPositions(grid) {
   const list = [];
   grid.forEach(row => {
@@ -498,7 +484,6 @@ function renderPlayersTable() {
       inputPos.style.width = "60px";
       inputPos.oninput = () => {
         const val = inputPos.value.trim().toUpperCase();
-        // 6개 역할만 허용
         p[key] = POSITION_CATEGORY_ORDER.includes(val) ? val : "";
         savePlayersToStorage();
         renderPlayersTable();
@@ -602,7 +587,7 @@ function addPlayer() {
     sub1: "",
     sub2: "",
     present: false,
-    targetQ: 3,
+    targetQ: 2,
     startQ: 1,
     endQ: 4,
     allocatedQuarters: 0
@@ -618,7 +603,7 @@ function resetPlayers() {
 }
 
 /* =========================
-   5. 라인업 생성 로직
+   5. 라인업 생성 로직 (쿼터당 1회 배정 보장)
    ========================= */
 
 function generateLineup() {
@@ -632,15 +617,14 @@ function generateLineup() {
 
   const formationKeyByQuarter = {};
   for (let q=1;q<=4;q++) {
-    formationKeyByQuarter[q] = resolveFormationKey(playersPerSide, baseType=baseFormationByQuarter[q]);
+    formationKeyByQuarter[q] = resolveFormationKey(playersPerSide, baseFormationByQuarter[q]);
   }
 
-  // 선수별 배정 초기화
   players.forEach(p => {
     p.allocatedQuarters = 0;
   });
 
-  // 쿼터별 이미 배정된 선수(한 쿼터에 한 번만)
+  // 이 Set 덕분에 "한 쿼터에 한 번만" 확실히 보장
   const assignedByQuarter = {
     1: new Set(),
     2: new Set(),
@@ -662,7 +646,10 @@ function generateLineup() {
       let bestScore = -1e15;
 
       players.forEach((p, idx) => {
-        const score = scorePlayerForSlotQuarter(p, idx, q, pos, assignedByQuarter, lastGkIndex);
+        // 이미 이 쿼터에 배정된 선수는 아예 후보에서 제외
+        if (assignedByQuarter[q].has(idx)) return;
+
+        const score = scorePlayerForSlotQuarter(p, idx, q, pos, lastGkIndex);
         if (score > bestScore) {
           bestScore = score;
           bestIdx = idx;
@@ -686,15 +673,14 @@ function generateLineup() {
 }
 
 /**
- * 포지션 카테고리 기반 점수 계산
- * GK는 별도, 나머지는 GK/CB/WB/MF/W/CF 비교
+ * 점수 계산: 포지션/목표쿼터/시간대 + GK 연속 가중치
+ * (여기서는 "이 쿼터에 이미 뛴 선수" 체크는 하지 않는다)
  */
-function scorePlayerForSlotQuarter(p, playerIndex, quarter, position, assignedByQuarter, lastGkIndex) {
+function scorePlayerForSlotQuarter(p, playerIndex, quarter, position, lastGkIndex) {
   if (!p.present) return -1e12;
   if (!p.name) return -1e12;
 
   if (quarter < p.startQ || quarter > p.endQ) return -1e12;
-  if (assignedByQuarter[quarter].has(playerIndex)) return -1e12;
 
   const targetQ = p.targetQ || 0;
   if (targetQ <= 0) return -1e12;
