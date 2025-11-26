@@ -371,6 +371,8 @@ function resolveFormationKey(playersPerSide, baseType) {
    ========================= */
 
 let players = [];
+let currentSlots = [];                    // {quarter,row,col,position,playerIndex}
+let currentFormationKeyByQuarter = {};    // {q: key}
 
 function loadPlayersFromStorage() {
   try {
@@ -592,7 +594,7 @@ function resetPlayers() {
 }
 
 /* =========================
-   5. 라인업 생성 로직 (각 칸 = 독립 슬롯, 쿼터당 1회 배정 보장)
+   5. 라인업 생성 로직
    ========================= */
 
 function generateLineup() {
@@ -604,21 +606,19 @@ function generateLineup() {
     4: document.getElementById("fQ4").value
   };
 
-  const formationKeyByQuarter = {};
+  currentFormationKeyByQuarter = {};
   for (let q=1;q<=4;q++) {
-    formationKeyByQuarter[q] = resolveFormationKey(playersPerSide, baseFormationByQuarter[q]);
+    currentFormationKeyByQuarter[q] = resolveFormationKey(playersPerSide, baseFormationByQuarter[q]);
   }
 
-  // 초기화
   players.forEach(p => { p.allocatedQuarters = 0; });
 
   const assignedByQuarter = { 1:new Set(), 2:new Set(), 3:new Set(), 4:new Set() };
   let lastGkIndex = null;
-
-  const slots = []; // {quarter, row, col, position, playerIndex}
+  currentSlots = [];
 
   for (let q=1;q<=4;q++) {
-    const formKey = formationKeyByQuarter[q];
+    const formKey = currentFormationKeyByQuarter[q];
     const form = FORMATIONS[formKey];
     if (!form) continue;
     const grid = form.grid;
@@ -633,8 +633,7 @@ function generateLineup() {
         let bestScore = -1e15;
 
         players.forEach((p, idx) => {
-          // 이미 이 쿼터에서 뛴 선수면 패스
-          if (assignedByQuarter[q].has(idx)) return;
+          if (assignedByQuarter[q].has(idx)) return; // 쿼터 내 중복 방지
 
           const score = scorePlayerForSlotQuarter(p, idx, q, pos, lastGkIndex);
           if (score > bestScore) {
@@ -644,22 +643,23 @@ function generateLineup() {
         });
 
         if (bestIdx >= 0 && bestScore > -1e10) {
-          slots.push({ quarter: q, row: r, col: c, position: pos, playerIndex: bestIdx });
+          currentSlots.push({ quarter: q, row: r, col: c, position: pos, playerIndex: bestIdx });
           players[bestIdx].allocatedQuarters += 1;
           assignedByQuarter[q].add(bestIdx);
           if (pos === "GK") lastGkIndex = bestIdx;
         } else {
-          slots.push({ quarter: q, row: r, col: c, position: pos, playerIndex: null });
+          currentSlots.push({ quarter: q, row: r, col: c, position: pos, playerIndex: null });
         }
       }
     }
   }
 
-  renderResult(slots, formationKeyByQuarter);
+  updateStatsFromSlots();
+  renderResult();
 }
 
 /**
- * 점수 계산 (한 쿼터 내 중복 여부는 generateLineup 쪽에서 막음)
+ * 점수 계산 (쿼터 내 중복 여부는 generateLineup 에서 이미 제외)
  */
 function scorePlayerForSlotQuarter(p, playerIndex, quarter, position, lastGkIndex) {
   if (!p.present) return -1e12;
@@ -710,66 +710,26 @@ function scorePlayerForSlotQuarter(p, playerIndex, quarter, position, lastGkInde
 }
 
 /* =========================
-   6. 결과 렌더링 (row,col 기준으로 이름 표시)
+   6. 결과 렌더링 + 수정 가능 셀
    ========================= */
 
-function renderResult(slots, formationKeyByQuarter) {
-  // 쿼터별 (row,col) -> name 매핑
-  const nameGridByQuarter = { 1: null, 2: null, 3: null, 4: null };
+function isPlayerUsedInQuarter(playerIndex, quarter, exceptSlot) {
+  if (playerIndex == null) return false;
+  return currentSlots.some(s =>
+    s.quarter === quarter &&
+    s !== exceptSlot &&
+    s.playerIndex === playerIndex
+  );
+}
 
-  for (let q=1;q<=4;q++) {
-    const formKey = formationKeyByQuarter[q];
-    const form = FORMATIONS[formKey];
-    if (!form) continue;
-    const grid = form.grid;
-    // 동일한 사이즈의 이름 그리드 생성
-    nameGridByQuarter[q] = grid.map(row => row.map(() => ""));
-  }
-
-  slots.forEach(slot => {
-    if (slot.playerIndex == null) return;
-    const q = slot.quarter;
-    const ng = nameGridByQuarter[q];
-    if (!ng) return;
-    ng[slot.row][slot.col] = players[slot.playerIndex].name || "";
-  });
-
-  for (let q=1;q<=4;q++) {
-    const formKey = formationKeyByQuarter[q];
-    const form = FORMATIONS[formKey];
-    const pitch = document.getElementById(`pitchQ${q}`);
-    const badge = document.getElementById(`badgeQ${q}`);
-    const ng = nameGridByQuarter[q];
-
-    if (!form || !pitch || !badge || !ng) continue;
-
-    badge.textContent = form.label;
-    pitch.innerHTML = "";
-
-    const grid = form.grid;
-    for (let r=0; r<grid.length; r++) {
-      const rowDiv = document.createElement("div");
-      rowDiv.className = "pitch-row";
-      for (let c=0; c<grid[r].length; c++) {
-        const pos = grid[r][c];
-        const cell = document.createElement("div");
-        cell.className = "pitch-cell";
-        if (pos) {
-          const name = ng[r][c] || "-";
-          const posDiv = document.createElement("div");
-          posDiv.className = "pitch-pos";
-          posDiv.textContent = pos;
-          const nameDiv = document.createElement("div");
-          nameDiv.className = "pitch-name";
-          nameDiv.textContent = name;
-          cell.appendChild(posDiv);
-          cell.appendChild(nameDiv);
-        }
-        rowDiv.appendChild(cell);
-      }
-      pitch.appendChild(rowDiv);
+function updateStatsFromSlots() {
+  players.forEach(p => { p.allocatedQuarters = 0; });
+  currentSlots.forEach(s => {
+    if (s.playerIndex != null) {
+      const p = players[s.playerIndex];
+      if (p) p.allocatedQuarters += 1;
     }
-  }
+  });
 
   let totalTargetQ = 0;
   let totalAllocatedQ = 0;
@@ -794,6 +754,87 @@ function renderResult(slots, formationKeyByQuarter) {
   playerQuartersDiv.textContent = lines.length
     ? `참석자별 출전 쿼터: ${lines.join(", ")}`
     : "";
+}
+
+function renderResult() {
+  // 쿼터별 slot 매핑 (row,col → slot)
+  const slotMapByQuarter = { 1:{}, 2:{}, 3:{}, 4:{} };
+  currentSlots.forEach(s => {
+    const key = `${s.row}_${s.col}`;
+    slotMapByQuarter[s.quarter][key] = s;
+  });
+
+  for (let q=1;q<=4;q++) {
+    const formKey = currentFormationKeyByQuarter[q];
+    const form = FORMATIONS[formKey];
+    const pitch = document.getElementById(`pitchQ${q}`);
+    const badge = document.getElementById(`badgeQ${q}`);
+
+    if (!form || !pitch || !badge) continue;
+
+    badge.textContent = form.label;
+    pitch.innerHTML = "";
+
+    const grid = form.grid;
+    for (let r=0; r<grid.length; r++) {
+      const rowDiv = document.createElement("div");
+      rowDiv.className = "pitch-row";
+      for (let c=0; c<grid[r].length; c++) {
+        const pos = grid[r][c];
+        const cell = document.createElement("div");
+        cell.className = "pitch-cell";
+
+        if (pos) {
+          const key = `${r}_${c}`;
+          const slot = slotMapByQuarter[q][key];
+
+          const posDiv = document.createElement("div");
+          posDiv.className = "pitch-pos";
+          posDiv.textContent = pos;
+          cell.appendChild(posDiv);
+
+          // 셀렉트 박스 (수정 가능)
+          const sel = document.createElement("select");
+          sel.style.fontSize = "10px";
+          sel.style.marginTop = "2px";
+
+          const optEmpty = document.createElement("option");
+          optEmpty.value = "";
+          optEmpty.textContent = "-";
+          sel.appendChild(optEmpty);
+
+          players.forEach((p, idx) => {
+            if (!p.present || !p.name) return;
+            const opt = document.createElement("option");
+            opt.value = String(idx);
+            opt.textContent = p.name;
+            if (slot && slot.playerIndex === idx) opt.selected = true;
+            sel.appendChild(opt);
+          });
+
+          sel.onchange = () => {
+            const prevIdx = slot.playerIndex;
+            const newVal = sel.value === "" ? null : Number(sel.value);
+
+            if (newVal !== null && isPlayerUsedInQuarter(newVal, q, slot)) {
+              alert("같은 쿼터에 한 선수는 한 번만 배정 가능합니다.");
+              // 이전 값으로 롤백
+              sel.value = prevIdx == null ? "" : String(prevIdx);
+              return;
+            }
+
+            slot.playerIndex = newVal;
+            updateStatsFromSlots();
+          };
+
+          cell.appendChild(sel);
+        }
+
+        rowDiv.appendChild(cell);
+      }
+      pitch.appendChild(rowDiv);
+    }
+  }
 }
 
 /* =========================
