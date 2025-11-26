@@ -77,7 +77,7 @@
     }
     .q-wrapper {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 12px;
       margin-top: 8px;
     }
@@ -118,6 +118,51 @@
     .icon-btn:hover {
       color: #ef4444;
     }
+
+    /* 포메이션 그라운드 뷰 */
+    .pitch {
+      margin-top: 6px;
+      padding: 4px;
+      border-radius: 8px;
+      background: #020617;
+      background-image: linear-gradient(to bottom, rgba(148,163,184,0.15) 1px, transparent 1px),
+                        linear-gradient(to right, rgba(148,163,184,0.15) 1px, transparent 1px);
+      background-size: 18px 18px;
+      color: #e5e7eb;
+      font-size: 10px;
+    }
+    .pitch-row {
+      display: flex;
+      justify-content: center;
+      margin: 2px 0;
+    }
+    .pitch-cell {
+      min-width: 46px;
+      min-height: 22px;
+      border-radius: 4px;
+      border: 1px solid rgba(148,163,184,0.6);
+      margin: 0 2px;
+      padding: 2px 4px;
+      text-align: center;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .pitch-pos {
+      opacity: 0.7;
+      font-size: 9px;
+      line-height: 1.1;
+    }
+    .pitch-name {
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1.1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     @media (max-width: 600px) {
       body { padding: 8px; }
       .controls { flex-direction: column; align-items: flex-start; }
@@ -216,7 +261,7 @@
     <button class="btn-secondary" onclick="resetPlayers()">선수 초기화</button>
   </div>
   <div class="note">
-    · 참석 체크박스를 끄면 그 선수는 이번 경기 배정에서 제외됩니다.<br>
+    · 참석 체크박스는 기본적으로 모두 꺼진 상태입니다. 오는 사람만 체크하세요.<br>
     · 포지션은 직접 수정하거나, 입력 중에 리스트에서 골라 쓸 수 있습니다.<br>
     · 목표 쿼터는 0.5 단위 입력 가능 (예: 2.5), 지각/조퇴는 시작Q/종료Q로 조정.
   </div>
@@ -230,7 +275,7 @@
 
 <script>
 /* =========================
-   1. 메타데이터 (선수 & 포메이션)
+   1. 메타데이터 (선수 & 포지션 & 포메이션)
    ========================= */
 
 // 초기 선수 리스트 (최초 1번만 사용, 이후에는 localStorage에서 로딩)
@@ -262,14 +307,14 @@ const initialPlayersTemplate = [
 ];
 
 // localStorage key
-const STORAGE_KEY = "restartfc_players_v1";
+const STORAGE_KEY = "restartfc_players_v2";
 
 /**
  * 포메이션 정의 (인원수 + 백 기준)
  * 키: '4-back_11', '3-back_11', '4-back_10', '3-back_10'
  */
 const FORMATIONS = {
-  // 11명용 4백: 4-3-3 (GK + 4DF + 3MF + 3FW)
+  // 11명용 4백: 4-3-3
   "4-back_11": {
     label: "4-3-3",
     grid: [
@@ -280,7 +325,7 @@ const FORMATIONS = {
       [ null, "GK", null ]
     ]
   },
-  // 11명용 3백: 3-4-3 (GK + 3DF + 4MF + 3FW)
+  // 11명용 3백: 3-4-3
   "3-back_11": {
     label: "3-4-3",
     grid: [
@@ -291,7 +336,7 @@ const FORMATIONS = {
       [ null, "GK", null ]
     ]
   },
-  // 10명용 4백: 4-2-3 (GK + 4DF + 2MF + 3FW)
+  // 10명용 4백: 4-2-3
   "4-back_10": {
     label: "4-2-3",
     grid: [
@@ -302,7 +347,7 @@ const FORMATIONS = {
       [ null, "GK", null ]
     ]
   },
-  // 10명용 3백: 3-5-1 (GK + 3DF + 5MF + 1FW)
+  // 10명용 3백: 3-5-1
   "3-back_10": {
     label: "3-5-1",
     grid: [
@@ -314,6 +359,28 @@ const FORMATIONS = {
     ]
   }
 };
+
+// 포지션 우선순위 (명단 정렬용)
+// 요구: GK - CF - LB - RB - DM - CM - AM - LW - RW - CF (+나머지)
+// CF는 중복이므로 한 번만 두고, 기타 CB 계열/사이드MF 등은 뒤로 배치
+const POSITION_PRIORITY = [
+  "GK",
+  "CF",
+  "LB",
+  "RB",
+  "DM",
+  "CM",
+  "AM",
+  "LW",
+  "RW",
+  "LCB",
+  "RCB",
+  "CB",
+  "LCM",
+  "RCM",
+  "LM",
+  "RM"
+];
 
 // 유틸: 포메이션의 포지션 목록 (중복 없이)
 function flattenPositions(grid) {
@@ -329,6 +396,12 @@ function flattenPositions(grid) {
 // playersPerSide(10/11) + "4-back"/"3-back" → FORMATIONS 키
 function resolveFormationKey(playersPerSide, baseType) {
   return `${baseType}_${playersPerSide}`;
+}
+
+// 포지션 순서 점수
+function getPositionRank(pos) {
+  const idx = POSITION_PRIORITY.indexOf(pos);
+  return idx === -1 ? 999 : idx;
 }
 
 /* =========================
@@ -378,10 +451,11 @@ function init() {
 
   players = base.map(p => ({
     name: p.name || "",
-    main: p.main || "",
-    sub1: p.sub1 || "",
-    sub2: p.sub2 || "",
-    present: p.present !== undefined ? !!p.present : true,
+    main: (p.main || "").toUpperCase(),
+    sub1: (p.sub1 || "").toUpperCase(),
+    sub2: (p.sub2 || "").toUpperCase(),
+    // 참석여부 기본 false
+    present: p.present !== undefined ? !!p.present : false,
     targetQ: p.targetQ !== undefined ? Number(p.targetQ) || 3 : 3,
     startQ: p.startQ !== undefined ? Number(p.startQ) || 1 : 1,
     endQ: p.endQ !== undefined ? Number(p.endQ) || 4 : 4,
@@ -395,7 +469,18 @@ function init() {
 function renderPlayersTable() {
   const tbody = document.querySelector("#playersTable tbody");
   tbody.innerHTML = "";
-  players.forEach((p, idx) => {
+
+  // 주포지션 기준으로 정렬 (GK → CF → LB → RB → …)
+  const sorted = [...players].sort((a, b) => {
+    const ra = getPositionRank(a.main);
+    const rb = getPositionRank(b.main);
+    if (ra !== rb) return ra - rb;
+    // 같은 포지션이면 이름 순
+    return (a.name || "").localeCompare(b.name || "", "ko");
+  });
+
+  sorted.forEach((p) => {
+    const idxInOriginal = players.indexOf(p);
     const tr = document.createElement("tr");
 
     // 참석 체크박스
@@ -434,6 +519,7 @@ function renderPlayersTable() {
       inputPos.oninput = () => {
         p[key] = inputPos.value.trim().toUpperCase();
         savePlayersToStorage();
+        renderPlayersTable(); // 포지션 바꾸면 정렬 다시
       };
       td.appendChild(inputPos);
       tr.appendChild(td);
@@ -492,9 +578,12 @@ function renderPlayersTable() {
     btnDel.title = "선수 삭제";
     btnDel.onclick = () => {
       if (confirm(`${p.name || "이 선수"}를 삭제할까요?`)) {
-        players.splice(idx, 1);
-        savePlayersToStorage();
-        renderPlayersTable();
+        const realIdx = players.indexOf(p);
+        if (realIdx >= 0) {
+          players.splice(realIdx, 1);
+          savePlayersToStorage();
+          renderPlayersTable();
+        }
       }
     };
     tdDel.appendChild(btnDel);
@@ -523,6 +612,12 @@ function renderQuarterCards() {
       <tbody id="tbodyQ${q}"></tbody>
     `;
     card.appendChild(table);
+
+    const pitch = document.createElement("div");
+    pitch.id = `pitchQ${q}`;
+    pitch.className = "pitch";
+    card.appendChild(pitch);
+
     container.appendChild(card);
   }
 }
@@ -537,7 +632,7 @@ function addPlayer() {
     main: "",
     sub1: "",
     sub2: "",
-    present: true,
+    present: false, // 새 선수도 기본은 참석 X
     targetQ: 2,
     startQ: 1,
     endQ: 4,
@@ -566,7 +661,6 @@ function generateLineup() {
     4: document.getElementById("fQ4").value
   };
 
-  // 쿼터별 실제 포메이션 키
   const formationKeyByQuarter = {};
   for (let q=1;q<=4;q++) {
     formationKeyByQuarter[q] = resolveFormationKey(playersPerSide, baseFormationByQuarter[q]);
@@ -577,7 +671,7 @@ function generateLineup() {
     p.allocatedSlots = 0;
   });
 
-  // 2) 슬롯 목록 생성 (쿼터 × 포지션 × 전/후반)
+  // 슬롯 목록 생성 (쿼터 × 포지션 × 전/후반)
   const slots = [];
   for (let q=1;q<=4;q++) {
     const formKey = formationKeyByQuarter[q];
@@ -592,7 +686,7 @@ function generateLineup() {
     });
   }
 
-  // 3) Greedy 배분
+  // Greedy 배분
   slots.forEach(slot => {
     let bestIdx = -1;
     let bestScore = -1e15;
@@ -611,7 +705,6 @@ function generateLineup() {
     }
   });
 
-  // 4) 결과 렌더링
   renderResult(slots, formationKeyByQuarter);
 }
 
@@ -643,7 +736,7 @@ function scorePlayerForSlot(p, slot) {
 }
 
 /* =========================
-   6. 결과 테이블 렌더링
+   6. 결과 테이블 & 포메이션 그라운드 렌더링
    ========================= */
 
 function renderResult(slots, formationKeyByQuarter) {
@@ -662,16 +755,18 @@ function renderResult(slots, formationKeyByQuarter) {
     result[q][pos][slot.half] = playerName;
   });
 
-  // 쿼터별 테이블 채우기
+  // 쿼터별 테이블 & 그라운드 채우기
   for (let q=1;q<=4;q++) {
     const formKey = formationKeyByQuarter[q];
     const form = FORMATIONS[formKey];
     const tbody = document.getElementById(`tbodyQ${q}`);
     const badge = document.getElementById(`badgeQ${q}`);
+    const pitch = document.getElementById(`pitchQ${q}`);
 
     if (!form) {
       if (tbody) tbody.innerHTML = "";
       if (badge) badge.textContent = "";
+      if (pitch) pitch.innerHTML = "";
       continue;
     }
 
@@ -680,16 +775,51 @@ function renderResult(slots, formationKeyByQuarter) {
 
     positions.forEach(pos => {
       const rowData = result[q][pos] || {A:"",B:""};
+      let displayA = rowData.A || "";
+      let displayB = rowData.B || "";
+
+      // 전반/후반이 동일하면 한 번만 표시
+      if (displayA && displayA === displayB) {
+        displayB = "";
+      }
+
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${pos}</td>
-        <td>${rowData.A || "-"}</td>
-        <td>${rowData.B || "-"}</td>
+        <td>${displayA || "-"}</td>
+        <td>${displayB || "-"}</td>
       `;
       tbody.appendChild(tr);
     });
 
     badge.textContent = form.label;
+
+    // 미니 그라운드 렌더링 (A 기준, 없으면 B)
+    if (pitch) {
+      pitch.innerHTML = "";
+      form.grid.forEach(row => {
+        const rowDiv = document.createElement("div");
+        rowDiv.className = "pitch-row";
+        row.forEach(pos => {
+          const cell = document.createElement("div");
+          cell.className = "pitch-cell";
+          if (pos) {
+            const data = result[q][pos] || {A:"",B:""};
+            const name = data.A || data.B || "";
+            const posDiv = document.createElement("div");
+            posDiv.className = "pitch-pos";
+            posDiv.textContent = pos;
+            const nameDiv = document.createElement("div");
+            nameDiv.className = "pitch-name";
+            nameDiv.textContent = name || "-";
+            cell.appendChild(posDiv);
+            cell.appendChild(nameDiv);
+          }
+          rowDiv.appendChild(cell);
+        });
+        pitch.appendChild(rowDiv);
+      });
+    }
   }
 
   // 전체 요약: 총 슬롯 vs 목표 슬롯
