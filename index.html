@@ -254,14 +254,14 @@
   </div>
   <div class="text-right" style="margin-bottom:4px;">
     <button class="btn-secondary" onclick="addPlayer()">선수 추가(용병 포함)</button>
-    <button class="btn-secondary" onclick="resetPlayers()">메타데이터 초기화(브라우저 캐시 삭제)</button>
+    <button class="btn-secondary" onclick="resetPlayers()">강력 새로고침</button>
   </div>
   <div class="note">
     · 참석 체크박스는 기본적으로 모두 꺼진 상태입니다. 오는 사람만 체크하세요.<br>
     · 포지션은 GK / CB / WB / MF / W / CF 중에서 **1~3순위**를 설정합니다.<br>
     · 목표 쿼터는 0.5 단위 입력 가능하며, 기본값은 3Q입니다. 실제 배치는 쿼터 단위(1Q) 기준입니다.<br>
     · 지각/조퇴는 시작Q/종료Q(0.5 단위)로 조정합니다. 예: 1.5 → 2Q부터, 3.5 → 3Q까지만 반영.<br>
-    · 컨디션이 나쁠수록 1-2-3 / 2-3-4 같은 연속 쿼터 배치를 최대한 피하려고 시도합니다.
+    · 컨디션이 숫자가 높을수록 1-2-3 / 2-3-4 같은 연속 쿼터 배치를 최대한 피하려고 시도합니다.
   </div>
 
   <!-- 결과 영역 -->
@@ -785,6 +785,21 @@ function resetPlayers() {
   if (!confirm("저장된 메타데이터(선수 정보, 포지션, 컨디션 등)를 모두 초기화할까요?")) return;
   window.localStorage.removeItem(STORAGE_KEY);
   init();
+}
+
+function hardResetAndReload() {
+  // 1) 앱 내부 데이터(localStorage, sessionStorage) 삭제
+  try {
+    localStorage.clear();
+    sessionStorage.clear();
+  } catch (e) {
+    console.warn("storage clear error", e);
+  }
+
+  // 2) URL에 강제 버전 파라미터 추가 → 새로운 주소로 인식 = 캐시 무시
+  const url = new URL(window.location.href);
+  url.searchParams.set("v", Date.now().toString()); // 예: ?v=1733212345678
+  window.location.replace(url.toString());
 }
 
 /* =========================
