@@ -256,12 +256,6 @@
     <button class="btn-secondary" onclick="addPlayer()">선수 추가(용병 포함)</button>
     <button class="btn-secondary" onclick="resetPlayers()">메타데이터 초기화(브라우저 캐시 삭제)</button>
   </div>
-  <div class="text-right" style="margin-bottom:4px;">
-    <button class="btn-secondary" onclick="setAllCondition(1)">컨디션 전체 1(좋음)</button>
-    <button class="btn-secondary" onclick="setAllCondition(2)">컨디션 전체 2(보통)</button>
-    <button class="btn-secondary" onclick="setAllCondition(3)">컨디션 전체 3(나쁨)</button>
-    <button class="btn-secondary" onclick="setAllTargetQ(3)">목표 쿼터 전체 3Q</button>
-  </div>
   <div class="note">
     · 참석 체크박스는 기본적으로 모두 꺼진 상태입니다. 오는 사람만 체크하세요.<br>
     · 포지션은 GK / CB / WB / MF / W / CF 중에서 **1~3순위**를 설정합니다.<br>
@@ -791,22 +785,6 @@ function resetPlayers() {
   if (!confirm("저장된 메타데이터(선수 정보, 포지션, 컨디션 등)를 모두 초기화할까요?")) return;
   window.localStorage.removeItem(STORAGE_KEY);
   init();
-}
-
-function setAllCondition(val) {
-  players.forEach(p => {
-    p.condition = val;
-  });
-  savePlayersToStorage();
-  renderPlayersTable();
-}
-
-function setAllTargetQ(val) {
-  players.forEach(p => {
-    p.targetQ = val;
-  });
-  savePlayersToStorage();
-  renderPlayersTable();
 }
 
 /* =========================
