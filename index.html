@@ -277,7 +277,7 @@
    1. 메타데이터 (선수 & 포지션 & 포메이션)
    ========================= */
 
-// ★ 컨디션을 여기서 관리 (1=좋음, 2=보통, 3=나쁨)
+// ★ 컨디션을 여기서 관리 (1=굳, 2=보통, 3=배려)
 const initialPlayersTemplate = [
   { name: "지환",   main: "GK", sub1: "",   sub2: "",  condition: 2 },
   { name: "이재현", main: "GK", sub1: "WB", sub2: "CB", condition: 2 },
@@ -369,7 +369,7 @@ const FORMATIONS = {
     grid: [
       [ null, "CF",  null ],
       [ "W",  null,  "W"  ],
-      [ "MF", "MF",  "MF", "MF" ],
+      [ "WB", "MF",  "MF", "WB" ],
       [ null, "CB",  "CB", "CB" ],
       [ null, "GK",  null ]
     ]
@@ -377,8 +377,8 @@ const FORMATIONS = {
   "11_3-5-2": {
     label: "3-5-2",
     grid: [
-      [ "CF", null, "CF" ],
-      [ "W",  "MF", "MF", "W" ],
+      [ "W", null, "CF" ],
+      [ "WB",  "MF", "MF", "WB" ],
       [ null, "MF", null ],
       [ null, "CB", "CB", "CB" ],
       [ null, "GK", null ]
@@ -409,7 +409,7 @@ const FORMATIONS = {
     label: "3-5-1",
     grid: [
       [ null, "CF",  null ],
-      [ "MF", "MF", "MF", "MF", "MF" ],
+      [ "WB", "W", "MF", "MF", "WB" ],
       [ null, "CB", "CB", "CB" ],
       [ null, "GK", null ]
     ]
@@ -417,7 +417,7 @@ const FORMATIONS = {
   "10_3-4-2": {
     label: "3-4-2",
     grid: [
-      [ "CF", null, "CF" ],
+      [ "CF", null, "W" ],
       [ "WB", "MF", "MF", "WB" ],
       [ null, "CB", "CB", "CB" ],
       [ null, "GK", null ]
