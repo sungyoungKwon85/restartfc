@@ -12,7 +12,7 @@
       margin: 0 auto;
     }
     h1 {
-      font-size: 20px;
+      font-size: 20px;쿼
       margin-bottom: 8px;
     }
     h2 {
@@ -1055,7 +1055,7 @@ function updateStatsFromSlots() {
     if (!p.present || !p.name) return;
     const qPlayed = p.allocatedQuarters || 0;
     // 컨디션 표시는 제거
-    lines.push(`${p.name}: ${qPlayed}Q / 목표 ${p.targetQ}Q`);
+    lines.push(`${p.name}: ${qPlayed}Q`);
   });
   playerQuartersDiv.textContent = lines.length
     ? `참석자별 출전 쿼터: ${lines.join(", ")}`
