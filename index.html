@@ -175,6 +175,14 @@
   <!-- 상단 설정 영역 -->
   <div class="controls">
     <label>
+      쿼터 수
+      <select id="numQuarters">
+        <option value="4" selected>4쿼터</option>
+        <option value="5">5쿼터</option>
+      </select>
+    </label>
+
+    <label>
       출전 인원 (한 팀)
       <select id="playersPerSide">
         <option value="10">10 : 10</option>
@@ -184,31 +192,28 @@
 
     <label>
       1쿼 포메이션
-      <select id="fQ1">
-        <option value="4-back" selected>4-back (10명=4-2-3, 11명=4-3-3)</option>
-        <option value="3-back">3-back (10명=3-5-1, 11명=3-4-3)</option>
-      </select>
+      <select id="fQ1"></select>
     </label>
     <label>
       2쿼 포메이션
-      <select id="fQ2">
-        <option value="4-back" selected>4-back (10명=4-2-3, 11명=4-3-3)</option>
-        <option value="3-back">3-back (10명=3-5-1, 11명=3-4-3)</option>
-      </select>
+      <select id="fQ2"></select>
     </label>
     <label>
       3쿼 포메이션
-      <select id="fQ3">
-        <option value="4-back">4-back (10명=4-2-3, 11명=4-3-3)</option>
-        <option value="3-back" selected>3-back (10명=3-5-1, 11명=3-4-3)</option>
-      </select>
+      <select id="fQ3"></select>
     </label>
     <label>
       4쿼 포메이션
-      <select id="fQ4">
-        <option value="4-back">4-back (10명=4-2-3, 11명=4-3-3)</option>
-        <option value="3-back" selected>3-back (10명=3-5-1, 11명=3-4-3)</option>
-      </select>
+      <select id="fQ4"></select>
+    </label>
+    <label>
+      5쿼 포메이션
+      <select id="fQ5"></select>
+    </label>
+
+    <label>
+      <input type="checkbox" id="sameFormation" checked />
+      모든 쿼터 동일 포메이션
     </label>
 
     <button onclick="generateLineup()">라인업 생성</button>
@@ -232,9 +237,10 @@
         <tr>
           <th>참석</th>
           <th>이름</th>
-          <th>주포지션</th>
-          <th>서브1</th>
-          <th>서브2</th>
+          <th>1순위</th>
+          <th>2순위</th>
+          <th>3순위</th>
+          <th>컨디션</th>
           <th>목표 쿼터</th>
           <th>시작Q</th>
           <th>종료Q</th>
@@ -247,14 +253,21 @@
     </table>
   </div>
   <div class="text-right" style="margin-bottom:4px;">
-    <button class="btn-secondary" onclick="addPlayer()">선수 추가</button>
-    <button class="btn-secondary" onclick="resetPlayers()">선수 초기화</button>
+    <button class="btn-secondary" onclick="addPlayer()">선수 추가(용병 포함)</button>
+    <button class="btn-secondary" onclick="resetPlayers()">메타데이터 초기화(브라우저 캐시 삭제)</button>
+  </div>
+  <div class="text-right" style="margin-bottom:4px;">
+    <button class="btn-secondary" onclick="setAllCondition(1)">컨디션 전체 1(좋음)</button>
+    <button class="btn-secondary" onclick="setAllCondition(2)">컨디션 전체 2(보통)</button>
+    <button class="btn-secondary" onclick="setAllCondition(3)">컨디션 전체 3(나쁨)</button>
+    <button class="btn-secondary" onclick="setAllTargetQ(3)">목표 쿼터 전체 3Q</button>
   </div>
   <div class="note">
     · 참석 체크박스는 기본적으로 모두 꺼진 상태입니다. 오는 사람만 체크하세요.<br>
-    · 포지션은 GK / CB / WB / MF / W / CF 중에서 선택해 사용합니다.<br>
-    · 목표 쿼터는 0.5 단위 입력 가능하지만, 현재 라인업 배정은 **쿼터 단위(1Q)** 기준입니다.<br>
-    · 지각/조퇴는 시작Q/종료Q로 조정합니다.
+    · 포지션은 GK / CB / WB / MF / W / CF 중에서 **1~3순위**를 설정합니다. 다른 포지션은 기본적으로 자동 배치하지 않습니다.<br>
+    · 목표 쿼터는 0.5 단위 입력 가능하며, 기본값은 3Q입니다. 실제 배치는 쿼터 단위(1Q) 기준입니다.<br>
+    · 지각/조퇴는 시작Q/종료Q로 조정합니다. 예: 1.5 → 2Q부터, 3.5 → 3Q까지만.<br>
+    · 컨디션이 나쁠수록 1-2-3 / 2-3-4 같은 연속 쿼터 배치를 최대한 피하려고 시도합니다.
   </div>
 
   <!-- 결과 영역 -->
@@ -282,7 +295,7 @@ const initialPlayersTemplate = [
   { name: "성영",   main: "WB", sub1: "CB", sub2: "W"  },
   { name: "규민",   main: "WB", sub1: "W",  sub2: "WB" },
   { name: "영현",   main: "WB", sub1: "W",  sub2: "WB" },
-  { name: "병진",   main: "WB", sub1: "CF",  sub2: "MF" },
+  { name: "병진",   main: "WB", sub1: "CF", sub2: "MF" },
 
   { name: "호균",   main: "MF", sub1: "MF", sub2: "CB" },
   { name: "명렬",   main: "MF", sub1: "WB", sub2: "CB" },
@@ -303,12 +316,30 @@ const initialPlayersTemplate = [
   { name: "현일",   main: "CF", sub1: "CF", sub2: "CB" }
 ];
 
-// localStorage key
-const STORAGE_KEY = "restartfc_players_v9";
+// localStorage key (버전 올림: v11)
+const STORAGE_KEY = "restartfc_players_v11";
 
-// 포메이션 정의 (각 칸은 독립 슬롯)
+// 사용 가능한 포메이션 목록 (백 수 + 전개, 10명/11명)
+const AVAILABLE_FORMATIONS = {
+  11: [
+    { id: "4-3-3",   label: "4-3-3 (4백)" },
+    { id: "4-2-3-1", label: "4-2-3-1 (4백)" },
+    { id: "4-1-4-1", label: "4-1-4-1 (4백)" },
+    { id: "3-4-3",   label: "3-4-3 (3백)" },
+    { id: "3-5-2",   label: "3-5-2 (3백)" }
+  ],
+  10: [
+    { id: "4-3-2",   label: "4-3-2 (4백)" },
+    { id: "4-2-3",   label: "4-2-3 (4백)" },
+    { id: "3-5-1",   label: "3-5-1 (3백)" },
+    { id: "3-4-2",   label: "3-4-2 (3백)" }
+  ]
+};
+
+// 실제 포지션 배치 (GK, CB, WB, MF, W, CF)
 const FORMATIONS = {
-  "4-back_11": {
+  // 11명 포메이션
+  "11_4-3-3": {
     label: "4-3-3",
     grid: [
       [ null, "CF",  null ],
@@ -318,7 +349,27 @@ const FORMATIONS = {
       [ null, "GK",  null ]
     ]
   },
-  "3-back_11": {
+  "11_4-2-3-1": {
+    label: "4-2-3-1",
+    grid: [
+      [ null, "CF",  null ],
+      [ "W",  "MF",  "W"  ],   // 3명의 2선 공격수 (W/MF/W)
+      [ "MF", null,  "MF" ],  // 2명의 수비형 MF
+      [ "WB", "CB",  "CB", "WB" ],
+      [ null, "GK",  null ]
+    ]
+  },
+  "11_4-1-4-1": {
+    label: "4-1-4-1",
+    grid: [
+      [ null, "CF",  null ],
+      [ "W",  "MF",  "W"  ],   // 측면 + 중앙 공격 MF
+      [ null,"MF", "MF",null], // 중앙 MF (2명)
+      [ "WB", "CB",  "CB", "WB" ],
+      [ null, "GK",  null ]
+    ]
+  },
+  "11_3-4-3": {
     label: "3-4-3",
     grid: [
       [ null, "CF",  null ],
@@ -328,7 +379,28 @@ const FORMATIONS = {
       [ null, "GK",  null ]
     ]
   },
-  "4-back_10": {
+  "11_3-5-2": {
+    label: "3-5-2",
+    grid: [
+      [ "CF", null, "CF" ],
+      [ "W",  "MF", "MF", "W" ],
+      [ null, "MF", null ],
+      [ null, "CB", "CB", "CB" ],
+      [ null, "GK", null ]
+    ]
+  },
+
+  // 10명 포메이션
+  "10_4-3-2": {
+    label: "4-3-2",
+    grid: [
+      [ "CF", null, "CF" ],
+      [ "W",  "MF", "W"  ],
+      [ "WB", "CB", "CB", "WB" ],
+      [ null, "GK", null ]
+    ]
+  },
+  "10_4-2-3": {
     label: "4-2-3",
     grid: [
       [ null, "CF",  null ],
@@ -338,7 +410,7 @@ const FORMATIONS = {
       [ null, "GK",  null ]
     ]
   },
-  "3-back_10": {
+  "10_3-5-1": {
     label: "3-5-1",
     grid: [
       [ null, "CF",  null ],
@@ -346,10 +418,29 @@ const FORMATIONS = {
       [ null, "CB", "CB", "CB" ],
       [ null, "GK", null ]
     ]
+  },
+  "10_3-4-2": {
+    label: "3-4-2",
+    grid: [
+      [ "CF", null, "CF" ],
+      [ "MF", "MF", "MF", "MF" ],
+      [ null, "CB", "CB", "CB" ],
+      [ null, "GK", null ]
+    ]
   }
 };
 
 const POSITION_CATEGORY_ORDER = ["GK","CB","WB","MF","W","CF"];
+const DEFAULT_TARGET_Q = 3;
+
+let totalQuarters = 4;
+let players = [];
+let currentSlots = [];                    // {quarter,row,col,position,playerIndex}
+let currentFormationKeyByQuarter = {};    // {q: key}
+
+/* =========================
+   2. 유틸
+   ========================= */
 
 function posCategory(pos) {
   if (!pos) return "";
@@ -363,17 +454,13 @@ function getPositionRank(pos) {
   return idx === -1 ? 999 : idx;
 }
 
-function resolveFormationKey(playersPerSide, baseType) {
-  return `${baseType}_${playersPerSide}`;
+function resolveFormationKey(playersPerSide, formationId) {
+  return `${playersPerSide}_${formationId}`;
 }
 
 /* =========================
-   2. 선수 데이터 로딩 / 저장
+   3. 선수 데이터 로딩 / 저장
    ========================= */
-
-let players = [];
-let currentSlots = [];                    // {quarter,row,col,position,playerIndex}
-let currentFormationKeyByQuarter = {};    // {q: key}
 
 function loadPlayersFromStorage() {
   try {
@@ -398,7 +485,8 @@ function savePlayersToStorage() {
       present: p.present,
       targetQ: p.targetQ,
       startQ: p.startQ,
-      endQ: p.endQ
+      endQ: p.endQ,
+      condition: p.condition
     }));
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch (e) {
@@ -407,8 +495,13 @@ function savePlayersToStorage() {
 }
 
 /* =========================
-   3. 화면 초기 렌더링
+   4. 화면 초기 렌더링
    ========================= */
+
+function updateTotalQuartersFromUI() {
+  const select = document.getElementById("numQuarters");
+  totalQuarters = select ? Number(select.value) || 4 : 4;
+}
 
 function init() {
   const stored = loadPlayersFromStorage();
@@ -420,14 +513,38 @@ function init() {
     sub1: (p.sub1 || "").toUpperCase(),
     sub2: (p.sub2 || "").toUpperCase(),
     present: p.present !== undefined ? !!p.present : false,
-    targetQ: p.targetQ !== undefined ? Number(p.targetQ) || 3 : 3,
+    targetQ: p.targetQ !== undefined ? Number(p.targetQ) || DEFAULT_TARGET_Q : DEFAULT_TARGET_Q,
     startQ: p.startQ !== undefined ? Number(p.startQ) || 1 : 1,
     endQ: p.endQ !== undefined ? Number(p.endQ) || 4 : 4,
+    condition: p.condition !== undefined ? Number(p.condition) || 2 : 2, // 1~3, 기본 2
     allocatedQuarters: 0
   }));
 
+  updateTotalQuartersFromUI();
+  initFormationSelects();
   renderPlayersTable();
   renderQuarterCards();
+  setupFormationLink();
+}
+
+function initFormationSelects() {
+  const playersPerSide = Number(document.getElementById("playersPerSide").value) || 11;
+  const list = AVAILABLE_FORMATIONS[playersPerSide] || AVAILABLE_FORMATIONS[11];
+  const defaultId = playersPerSide === 10 ? "4-2-3" : "4-3-3";
+
+  const ids = ["fQ1","fQ2","fQ3","fQ4","fQ5"];
+  ids.forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = "";
+    list.forEach(f => {
+      const opt = document.createElement("option");
+      opt.value = f.id;
+      opt.textContent = f.label;
+      if (f.id === defaultId) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  });
 }
 
 function renderPlayersTable() {
@@ -444,6 +561,7 @@ function renderPlayersTable() {
   sorted.forEach((p) => {
     const tr = document.createElement("tr");
 
+    // 참석
     const tdPresent = document.createElement("td");
     const chk = document.createElement("input");
     chk.type = "checkbox";
@@ -455,6 +573,7 @@ function renderPlayersTable() {
     tdPresent.appendChild(chk);
     tr.appendChild(tdPresent);
 
+    // 이름
     const tdName = document.createElement("td");
     const inputName = document.createElement("input");
     inputName.type = "text";
@@ -467,6 +586,7 @@ function renderPlayersTable() {
     tdName.appendChild(inputName);
     tr.appendChild(tdName);
 
+    // 1,2,3순위 포지션
     ["main","sub1","sub2"].forEach(key => {
       const td = document.createElement("td");
       const inputPos = document.createElement("input");
@@ -484,6 +604,27 @@ function renderPlayersTable() {
       tr.appendChild(td);
     });
 
+    // 컨디션
+    const tdCond = document.createElement("td");
+    const selCond = document.createElement("select");
+    selCond.style.fontSize = "11px";
+    ["1","2","3"].forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = v;
+      if (v === "1") opt.textContent = "1(좋음)";
+      if (v === "2") opt.textContent = "2(보통)";
+      if (v === "3") opt.textContent = "3(나쁨)";
+      if (Number(v) === (p.condition || 2)) opt.selected = true;
+      selCond.appendChild(opt);
+    });
+    selCond.onchange = () => {
+      p.condition = Number(selCond.value) || 2;
+      savePlayersToStorage();
+    };
+    tdCond.appendChild(selCond);
+    tr.appendChild(tdCond);
+
+    // 목표 쿼터
     const tdTarget = document.createElement("td");
     const inputTarget = document.createElement("input");
     inputTarget.type = "number";
@@ -498,34 +639,45 @@ function renderPlayersTable() {
     tdTarget.appendChild(inputTarget);
     tr.appendChild(tdTarget);
 
+    // 시작Q (0.5 단위)
     const tdStart = document.createElement("td");
     const inputStart = document.createElement("input");
     inputStart.type = "number";
+    inputStart.step = "0.5";
     inputStart.min = "1";
-    inputStart.max = "4";
+    inputStart.max = "5";
     inputStart.value = p.startQ;
-    inputStart.style.width = "40px";
+    inputStart.style.width = "50px";
     inputStart.onchange = () => {
-      p.startQ = Number(inputStart.value) || 1;
+      let v = Number(inputStart.value) || 1;
+      if (v < 1) v = 1;
+      if (v > 5) v = 5;
+      p.startQ = v;
       savePlayersToStorage();
     };
     tdStart.appendChild(inputStart);
     tr.appendChild(tdStart);
 
+    // 종료Q (0.5 단위)
     const tdEnd = document.createElement("td");
     const inputEnd = document.createElement("input");
     inputEnd.type = "number";
+    inputEnd.step = "0.5";
     inputEnd.min = "1";
-    inputEnd.max = "4";
+    inputEnd.max = "5";
     inputEnd.value = p.endQ;
-    inputEnd.style.width = "40px";
+    inputEnd.style.width = "50px";
     inputEnd.onchange = () => {
-      p.endQ = Number(inputEnd.value) || 4;
+      let v = Number(inputEnd.value) || 1;
+      if (v < 1) v = 1;
+      if (v > 5) v = 5;
+      p.endQ = v;
       savePlayersToStorage();
     };
     tdEnd.appendChild(inputEnd);
     tr.appendChild(tdEnd);
 
+    // 삭제 버튼
     const tdDel = document.createElement("td");
     const btnDel = document.createElement("button");
     btnDel.className = "icon-btn";
@@ -551,7 +703,7 @@ function renderPlayersTable() {
 function renderQuarterCards() {
   const container = document.getElementById("quartersContainer");
   container.innerHTML = "";
-  for (let q=1;q<=4;q++) {
+  for (let q = 1; q <= totalQuarters; q++) {
     const card = document.createElement("div");
     card.className = "q-card";
     card.id = `cardQ${q}`;
@@ -569,7 +721,52 @@ function renderQuarterCards() {
 }
 
 /* =========================
-   4. 선수 추가 / 초기화
+   5. 포메이션 연동 옵션
+   ========================= */
+
+function setupFormationLink() {
+  const sameCheckbox = document.getElementById("sameFormation");
+  const ids = ["fQ1","fQ2","fQ3","fQ4","fQ5"];
+  const fQ1 = document.getElementById("fQ1");
+
+  function applyToAll() {
+    if (!sameCheckbox.checked) return;
+    const base = fQ1.value;
+    ids.slice(1).forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = base;
+    });
+  }
+
+  if (fQ1) {
+    fQ1.addEventListener("change", applyToAll);
+  }
+  if (sameCheckbox) {
+    sameCheckbox.addEventListener("change", applyToAll);
+  }
+
+  applyToAll();
+
+  const numQSelect = document.getElementById("numQuarters");
+  if (numQSelect) {
+    numQSelect.addEventListener("change", () => {
+      updateTotalQuartersFromUI();
+      renderQuarterCards();
+      renderResult();
+    });
+  }
+
+  const ppsSelect = document.getElementById("playersPerSide");
+  if (ppsSelect) {
+    ppsSelect.addEventListener("change", () => {
+      initFormationSelects();
+      applyToAll();
+    });
+  }
+}
+
+/* =========================
+   6. 선수 추가 / 초기화 / 일괄 설정
    ========================= */
 
 function addPlayer() {
@@ -579,9 +776,10 @@ function addPlayer() {
     sub1: "",
     sub2: "",
     present: false,
-    targetQ: 2,
+    targetQ: DEFAULT_TARGET_Q,
     startQ: 1,
     endQ: 4,
+    condition: 2,
     allocatedQuarters: 0
   });
   savePlayersToStorage();
@@ -589,129 +787,253 @@ function addPlayer() {
 }
 
 function resetPlayers() {
-  if (!confirm("선수 목록을 처음 상태로 되돌릴까요? (현재 저장된 정보는 사라집니다)")) return;
+  if (!confirm("저장된 메타데이터(선수 정보, 포지션, 컨디션 등)를 모두 초기화할까요?")) return;
   window.localStorage.removeItem(STORAGE_KEY);
   init();
 }
 
+function setAllCondition(val) {
+  players.forEach(p => {
+    p.condition = val;
+  });
+  savePlayersToStorage();
+  renderPlayersTable();
+}
+
+function setAllTargetQ(val) {
+  players.forEach(p => {
+    p.targetQ = val;
+  });
+  savePlayersToStorage();
+  renderPlayersTable();
+}
+
 /* =========================
-   5. 라인업 생성 로직
+   7. 라인업 생성 로직 (2패스)
    ========================= */
 
 function generateLineup() {
+  updateTotalQuartersFromUI();
+
   const playersPerSide = Number(document.getElementById("playersPerSide").value);
-  const baseFormationByQuarter = {
-    1: document.getElementById("fQ1").value,
-    2: document.getElementById("fQ2").value,
-    3: document.getElementById("fQ3").value,
-    4: document.getElementById("fQ4").value
-  };
+
+  // 쿼터별 포메이션 ID 읽기
+  const formationIdByQuarter = {};
+  for (let q = 1; q <= totalQuarters; q++) {
+    const select = document.getElementById(`fQ${q}`);
+    formationIdByQuarter[q] = select ? select.value : (playersPerSide === 10 ? "4-2-3" : "4-3-3");
+  }
 
   currentFormationKeyByQuarter = {};
-  for (let q=1;q<=4;q++) {
-    currentFormationKeyByQuarter[q] = resolveFormationKey(playersPerSide, baseFormationByQuarter[q]);
+  for (let q = 1; q <= totalQuarters; q++) {
+    currentFormationKeyByQuarter[q] = resolveFormationKey(playersPerSide, formationIdByQuarter[q]);
   }
 
   players.forEach(p => { p.allocatedQuarters = 0; });
 
-  const assignedByQuarter = { 1:new Set(), 2:new Set(), 3:new Set(), 4:new Set() };
+  const assignedByQuarter = {};
+  for (let q = 1; q <= totalQuarters; q++) {
+    assignedByQuarter[q] = new Set();
+  }
+
   let lastGkIndex = null;
   currentSlots = [];
 
-  for (let q=1;q<=4;q++) {
+  // 1) 먼저 모든 슬롯 구조만 만든다
+  for (let q = 1; q <= totalQuarters; q++) {
     const formKey = currentFormationKeyByQuarter[q];
     const form = FORMATIONS[formKey];
     if (!form) continue;
     const grid = form.grid;
 
-    for (let r=0; r<grid.length; r++) {
+    for (let r = 0; r < grid.length; r++) {
       const row = grid[r];
-      for (let c=0; c<row.length; c++) {
+      for (let c = 0; c < row.length; c++) {
         const pos = row[c];
         if (!pos) continue;
-
-        let bestIdx = -1;
-        let bestScore = -1e15;
-
-        players.forEach((p, idx) => {
-          if (assignedByQuarter[q].has(idx)) return; // 쿼터 내 중복 방지
-
-          const score = scorePlayerForSlotQuarter(p, idx, q, pos, lastGkIndex);
-          if (score > bestScore) {
-            bestScore = score;
-            bestIdx = idx;
-          }
-        });
-
-        if (bestIdx >= 0 && bestScore > -1e10) {
-          currentSlots.push({ quarter: q, row: r, col: c, position: pos, playerIndex: bestIdx });
-          players[bestIdx].allocatedQuarters += 1;
-          assignedByQuarter[q].add(bestIdx);
-          if (pos === "GK") lastGkIndex = bestIdx;
-        } else {
-          currentSlots.push({ quarter: q, row: r, col: c, position: pos, playerIndex: null });
-        }
+        currentSlots.push({ quarter: q, row: r, col: c, position: pos, playerIndex: null });
       }
     }
   }
+
+  // 2) 1~3순위 포지션에 맞춰 1차 배정
+  currentSlots.forEach(slot => {
+    const q = slot.quarter;
+    const pos = slot.position;
+
+    let bestIdx = -1;
+    let bestScore = -1e15;
+
+    players.forEach((p, idx) => {
+      if (assignedByQuarter[q].has(idx)) return;
+      const score = scorePlayerForSlotQuarter(p, idx, q, pos, lastGkIndex, false); // allowNonPreferred=false
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = idx;
+      }
+    });
+
+    if (bestIdx >= 0 && bestScore > -1e10) {
+      slot.playerIndex = bestIdx;
+      players[bestIdx].allocatedQuarters += 1;
+      assignedByQuarter[q].add(bestIdx);
+      if (pos === "GK") lastGkIndex = bestIdx;
+    }
+  });
+
+  // 3) 비어있는 슬롯은 컨디션 좋은 선수 우선으로 2차 배정 (포지션 무시 가능)
+  currentSlots.forEach(slot => {
+    if (slot.playerIndex != null) return; // 이미 배정됨
+
+    const q = slot.quarter;
+    const pos = slot.position;
+
+    let bestIdx = -1;
+    let bestScore = -1e15;
+
+    players.forEach((p, idx) => {
+      if (assignedByQuarter[q].has(idx)) return;
+      const score = scorePlayerForSlotQuarter(p, idx, q, pos, lastGkIndex, true); // allowNonPreferred=true
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = idx;
+      }
+    });
+
+    if (bestIdx >= 0 && bestScore > -1e10) {
+      slot.playerIndex = bestIdx;
+      players[bestIdx].allocatedQuarters += 1;
+      assignedByQuarter[q].add(bestIdx);
+      if (pos === "GK") lastGkIndex = bestIdx;
+    }
+  });
 
   updateStatsFromSlots();
   renderResult();
 }
 
 /**
- * 점수 계산 (쿼터 내 중복 여부는 generateLineup 에서 이미 제외)
+ * 해당 선수의 이미 배정된 쿼터 목록
  */
-function scorePlayerForSlotQuarter(p, playerIndex, quarter, position, lastGkIndex) {
+function getPlayerAssignedQuarters(playerIndex) {
+  const qs = new Set();
+  currentSlots.forEach(s => {
+    if (s.playerIndex === playerIndex) {
+      qs.add(s.quarter);
+    }
+  });
+  return Array.from(qs).sort((a, b) => a - b);
+}
+
+/**
+ * 점수 계산
+ *  - 1차 패스: 1~3순위 포지션만 허용
+ *  - 2차 패스: 포지션 상관 없이, 컨디션 & 공평성 위주
+ *  - GK는 가능하면 한 명이 계속, 없으면 포지션 무시하고 그래도 제일 맞는 사람
+ */
+function scorePlayerForSlotQuarter(p, playerIndex, quarter, position, lastGkIndex, allowNonPreferred) {
   if (!p.present) return -1e12;
   if (!p.name) return -1e12;
-  if (quarter < p.startQ || quarter > p.endQ) return -1e12;
+
+  // 0.5 단위 지각/조퇴 처리: 해당 쿼터가 [ceil(startQ), floor(endQ)] 범위 내여야 함
+  const minQ = Math.ceil(p.startQ || 1);
+  const maxQ = Math.floor(p.endQ || totalQuarters);
+  if (quarter < minQ || quarter > maxQ) return -1e12;
 
   const targetQ = p.targetQ || 0;
   if (targetQ <= 0) return -1e12;
 
-  let score = 0;
   const posCat = posCategory(position);
   const mainCat = posCategory(p.main);
   const sub1Cat = posCategory(p.sub1);
   const sub2Cat = posCategory(p.sub2);
 
+  const isInPreferred =
+    posCat &&
+    (posCat === mainCat || posCat === sub1Cat || posCat === sub2Cat);
+
+  let score = 0;
+
+  // GK 처리 (최우선)
   if (position === "GK") {
-    if (p.main === "GK") score += 100;
-    else if (p.sub1 === "GK" || p.sub2 === "GK") score += 70;
+    if (!allowNonPreferred && !isInPreferred) {
+      // 1차 패스에서 GK 경험 없는 선수는 배제
+      return -1e12;
+    }
+
+    if (p.main === "GK") score += 120;
+    else if (p.sub1 === "GK" || p.sub2 === "GK") score += 80;
+    else if (allowNonPreferred) {
+      // 2차 패스: 어쩔 수 없이 GK가 없으면, 다른 포지션 중에서라도 선택
+      score += 10;
+    }
 
     let gkBase = 0;
-    if (p.main === "GK") gkBase = 200;
-    else if (p.sub1 === "GK" || p.sub2 === "GK") gkBase = 150;
+    if (p.main === "GK") gkBase = 250;
+    else if (p.sub1 === "GK" || p.sub2 === "GK") gkBase = 180;
     score += gkBase;
 
-    if (lastGkIndex === playerIndex) score += 80;
+    // 같은 GK가 계속 가도록 보너스
+    if (lastGkIndex === playerIndex) score += 100;
   } else {
-    if (posCat && posCat === mainCat) {
-      score += 100;
-    } else if (posCat && posCat === sub1Cat) {
-      score += 70;
-    } else if (posCat && posCat === sub2Cat) {
-      score += 50;
-    } else {
-      score += 5;
+    // 필드 포지션
+    if (!isInPreferred && !allowNonPreferred) {
+      // 1차 패스: 1~3순위에 없는 포지션은 배정하지 않음
+      return -1e11;
+    }
+
+    if (isInPreferred) {
+      if (posCat === mainCat) {
+        score += 100;
+      } else if (posCat === sub1Cat) {
+        score += 75;
+      } else if (posCat === sub2Cat) {
+        score += 55;
+      }
+    } else if (allowNonPreferred) {
+      // 2차 패스: 포지션 안 맞아도 최소한의 점수
+      score += 10;
     }
   }
 
+  // 목표 쿼터 대비 남은 쿼터 (공평하게 3,3 되도록)
   const allocated = p.allocatedQuarters || 0;
   const remain = targetQ - allocated;
 
   if (remain > 0) {
-    score += remain * 20;
+    score += remain * 40;   // 덜 뛴 선수 강하게 우선
   } else if (remain < 0) {
-    score += remain * 10;
+    score += remain * 30;   // 이미 많이 뛴 선수는 큰 페널티 (ex. 4 vs 2 상황 방지)
+  }
+
+  // 연속/근접 쿼터 출전 페널티 (GK 제외)
+  if (position !== "GK") {
+    const assignedQs = getPlayerAssignedQuarters(playerIndex);
+    const cond = p.condition || 2; // 1(좋음)~3(나쁨)
+
+    let nearCount = 0;
+    assignedQs.forEach(q => {
+      if (Math.abs(q - quarter) <= 1) nearCount++;
+    });
+
+    if (nearCount > 0) {
+      // 컨디션이 나쁠수록, 근접 쿼터가 많을수록 더 큰 페널티
+      score -= nearCount * cond * 20;
+    }
+  }
+
+  // 2차 패스에서 컨디션 좋은 선수 우선 (특히 남는 쿼터: 4Q, 5Q 등)
+  if (allowNonPreferred) {
+    const cond = p.condition || 2; // 1이 가장 좋음
+    const condScore = (4 - cond) * 30; // 1→90, 2→60, 3→30
+    score += condScore;
   }
 
   return score;
 }
 
 /* =========================
-   6. 결과 렌더링 + 수정 가능 셀
+   8. 결과 렌더링 + 수정 가능 셀
    ========================= */
 
 function isPlayerUsedInQuarter(playerIndex, quarter, exceptSlot) {
@@ -750,7 +1072,7 @@ function updateStatsFromSlots() {
   players.forEach(p => {
     if (!p.present || !p.name) return;
     const qPlayed = p.allocatedQuarters || 0;
-    lines.push(`${p.name}: ${qPlayed}Q`);
+    lines.push(`${p.name}: ${qPlayed}Q / 목표 ${p.targetQ}Q (컨디션 ${p.condition})`);
   });
   playerQuartersDiv.textContent = lines.length
     ? `참석자별 출전 쿼터: ${lines.join(", ")}`
@@ -758,29 +1080,51 @@ function updateStatsFromSlots() {
 }
 
 function renderResult() {
-  // 쿼터별 slot 매핑 (row,col → slot)
-  const slotMapByQuarter = { 1:{}, 2:{}, 3:{}, 4:{} };
+  if (!currentSlots || currentSlots.length === 0) {
+    for (let q = 1; q <= totalQuarters; q++) {
+      const badge = document.getElementById(`badgeQ${q}`);
+      const pitch = document.getElementById(`pitchQ${q}`);
+      if (badge) badge.textContent = "";
+      if (pitch) pitch.innerHTML = "";
+    }
+    return;
+  }
+
+  const slotMapByQuarter = {};
+  for (let q = 1; q <= totalQuarters; q++) {
+    slotMapByQuarter[q] = {};
+  }
+
   currentSlots.forEach(s => {
     const key = `${s.row}_${s.col}`;
+    if (!slotMapByQuarter[s.quarter]) {
+      slotMapByQuarter[s.quarter] = {};
+    }
     slotMapByQuarter[s.quarter][key] = s;
   });
 
-  for (let q=1;q<=4;q++) {
+  for (let q = 1; q <= totalQuarters; q++) {
     const formKey = currentFormationKeyByQuarter[q];
     const form = FORMATIONS[formKey];
     const pitch = document.getElementById(`pitchQ${q}`);
     const badge = document.getElementById(`badgeQ${q}`);
 
-    if (!form || !pitch || !badge) continue;
+    if (!pitch || !badge) continue;
+
+    if (!form) {
+      badge.textContent = "";
+      pitch.innerHTML = "";
+      continue;
+    }
 
     badge.textContent = form.label;
     pitch.innerHTML = "";
 
     const grid = form.grid;
-    for (let r=0; r<grid.length; r++) {
+    for (let r = 0; r < grid.length; r++) {
       const rowDiv = document.createElement("div");
       rowDiv.className = "pitch-row";
-      for (let c=0; c<grid[r].length; c++) {
+      for (let c = 0; c < grid[r].length; c++) {
         const pos = grid[r][c];
         const cell = document.createElement("div");
         cell.className = "pitch-cell";
@@ -794,7 +1138,6 @@ function renderResult() {
           posDiv.textContent = pos;
           cell.appendChild(posDiv);
 
-          // 셀렉트 박스 (수정 가능)
           const sel = document.createElement("select");
           sel.style.fontSize = "10px";
           sel.style.marginTop = "2px";
@@ -819,7 +1162,6 @@ function renderResult() {
 
             if (newVal !== null && isPlayerUsedInQuarter(newVal, q, slot)) {
               alert("같은 쿼터에 한 선수는 한 번만 배정 가능합니다.");
-              // 이전 값으로 롤백
               sel.value = prevIdx == null ? "" : String(prevIdx);
               return;
             }
@@ -839,7 +1181,7 @@ function renderResult() {
 }
 
 /* =========================
-   7. 초기 실행
+   9. 초기 실행
    ========================= */
 init();
 </script>
