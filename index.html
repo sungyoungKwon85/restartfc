@@ -418,7 +418,7 @@ const FORMATIONS = {
     label: "3-4-2",
     grid: [
       [ "CF", null, "CF" ],
-      [ "MF", "MF", "MF", "MF" ],
+      [ "WB", "MF", "MF", "WB" ],
       [ null, "CB", "CB", "CB" ],
       [ null, "GK", null ]
     ]
@@ -573,7 +573,7 @@ function renderPlayersTable() {
     const inputName = document.createElement("input");
     inputName.type = "text";
     inputName.value = p.name;
-    inputName.style.width = "60px"; // 좁게
+    inputName.style.width = "50px"; // 좁게
     inputName.oninput = () => {
       p.name = inputName.value.trim();
       savePlayersToStorage();
@@ -588,7 +588,7 @@ function renderPlayersTable() {
       inputPos.type = "text";
       inputPos.setAttribute("list", "positionList");
       inputPos.value = p[key] || "";
-      inputPos.style.width = "40px"; // 좁게
+      inputPos.style.width = "30px"; // 좁게
       inputPos.oninput = () => {
         const val = inputPos.value.trim().toUpperCase();
         p[key] = POSITION_CATEGORY_ORDER.includes(val) ? val : "";
@@ -626,7 +626,7 @@ function renderPlayersTable() {
     inputTarget.step = "0.5";
     inputTarget.min = "0";
     inputTarget.value = p.targetQ;
-    inputTarget.style.width = "50px";
+    inputTarget.style.width = "30px";
     inputTarget.onchange = () => {
       p.targetQ = Number(inputTarget.value) || 0;
       savePlayersToStorage();
@@ -642,7 +642,7 @@ function renderPlayersTable() {
     inputStart.min = "1";
     inputStart.max = "5";
     inputStart.value = p.startQ;
-    inputStart.style.width = "50px";
+    inputStart.style.width = "30px";
     inputStart.onchange = () => {
       let v = Number(inputStart.value) || 1;
       if (v < 1) v = 1;
@@ -661,7 +661,7 @@ function renderPlayersTable() {
     inputEnd.min = "1";
     inputEnd.max = "5";
     inputEnd.value = p.endQ;
-    inputEnd.style.width = "50px";
+    inputEnd.style.width = "30px";
     inputEnd.onchange = () => {
       let v = Number(inputEnd.value) || 1;
       if (v < 1) v = 1;
@@ -969,7 +969,14 @@ function scorePlayerForSlotQuarter(p, playerIndex, quarter, position, lastGkInde
         score += 55;
       }
     } else if (allowNonPreferred) {
-      score += 10;
+      // ★ 보강: CF 자리인데 CF가 부족하면 W를 우선 후보로 사용
+      if (position === "CF" &&
+          (p.main === "W" || p.sub1 === "W" || p.sub2 === "W")) {
+        // 그냥 아무 포지션이나 넣는 것(10점)보다 훨씬 높은 점수
+        score += 50;
+      } else {
+        score += 10;
+      }
     }
   }
 
